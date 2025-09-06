@@ -7,7 +7,10 @@ import {
   addLayer, 
   undo, 
   redo,
-  setIsSnapping 
+  setIsSnapping,
+  applyTrimOperations,
+  splitLayerAtPlayhead,
+  deleteClipById
 } from '../redux/slices/timelineSlice';
 
 const ToolbarContainer = styled.div`
@@ -81,15 +84,19 @@ const ToolbarLabel = styled.span`
   font-weight: 500;
 `;
 
-const TimelineToolbar: React.FC = () => {
+const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const dispatch = useAppDispatch();
-  const { 
-    isPlaying, 
+    const {
+    isPlaying,
     playheadTime, 
     duration, 
     isSnapping,
     undoStack,
-    redoStack 
+    redoStack,
+    selectedLayer,
+    selectedClips,
+    layers,
+    trimState
   } = useAppSelector(state => state.timeline);
 
   const handlePlayPause = () => {
@@ -137,6 +144,46 @@ const TimelineToolbar: React.FC = () => {
 
   const handleToggleSnapping = () => {
     dispatch(setIsSnapping(!isSnapping));
+  };
+
+  const handleTrim = () => {
+    if (selectedClips.length > 0) {
+      // Get the layer that contains the selected clip
+      const selectedClipId = selectedClips[0]; // Use first selected clip
+      const layer = layers.find(l => l.clips.some(c => c.id === selectedClipId));
+      
+      if (layer) {
+        // Split the layer at the current playhead position
+        dispatch(splitLayerAtPlayhead({
+          layerId: layer.id,
+          splitTime: playheadTime,
+          projectId: projectId
+        }));
+      }
+    }
+  };
+
+  const handleDelete = () => {
+    if (selectedClips.length > 0) {
+      // Get the layer that contains the selected clip
+      const selectedClipId = selectedClips[0]; // Use first selected clip
+      const layer = layers.find(l => l.clips.some(c => c.id === selectedClipId));
+      
+      if (layer) {
+        // Delete the selected clip by ID
+        dispatch(deleteClipById({
+          layerId: layer.id,
+          clipId: selectedClipId,
+          projectId: projectId
+        }));
+      }
+    }
+  };
+
+  const handleApplyChanges = () => {
+    if (selectedLayer) {
+      dispatch(applyTrimOperations({ layerId: selectedLayer }));
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -192,6 +239,34 @@ const TimelineToolbar: React.FC = () => {
         <ToolbarButton onClick={() => handleAddLayer('effect')} title="Add Effect Layer">
           ✨
         </ToolbarButton>
+        
+        {/* Trim/Delete Controls - Only show when clip is selected */}
+        {selectedClips.length > 0 && (
+          <>
+            <ToolbarButton 
+              onClick={handleTrim} 
+              disabled={false}
+              title="Split layer at playhead position"
+            >
+              ✂️
+            </ToolbarButton>
+            <ToolbarButton 
+              onClick={handleDelete} 
+              disabled={false}
+              title="Delete clip at playhead position"
+            >
+              🗑️
+            </ToolbarButton>
+            <ToolbarButton 
+              onClick={handleApplyChanges} 
+              disabled={trimState.pendingOperations.length === 0}
+              title="Apply All Changes"
+              $primary={trimState.pendingOperations.length > 0}
+            >
+              ✅
+            </ToolbarButton>
+          </>
+        )}
       </ToolbarGroup>
 
       {/* Edit Controls */}

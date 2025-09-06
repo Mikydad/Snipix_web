@@ -7,6 +7,7 @@ import {
   setZoom, 
   selectClip,
   clearSelection,
+  clearLayerSelection,
   moveClip,
   splitClip
 } from '../redux/slices/timelineSlice';
@@ -105,7 +106,7 @@ const TimelineEditor: React.FC<{
 }> = ({ projectId, layers, playheadTime, zoom, duration }) => {
   const dispatch = useAppDispatch();
   const timelineRef = useRef<HTMLDivElement>(null);
-  const { selectedClips } = useAppSelector(state => state.timeline);
+  const { selectedClips, selectedLayer } = useAppSelector(state => state.timeline);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = React.useState(false);
 
   // Convert time to pixels based on zoom
@@ -163,8 +164,12 @@ const TimelineEditor: React.FC<{
 
   // Handle timeline click (not on clips)
   const handleTimelineClick = useCallback((event: React.MouseEvent) => {
-    // Only handle clicks on the timeline background, not on clips
-    if (event.target === event.currentTarget) {
+    // Check if the click originated from a layer track
+    const target = event.target as HTMLElement;
+    const isLayerClick = target.closest('[data-layer-track]') !== null;
+    
+    // Only handle clicks on the timeline background, not on clips or layers
+    if (event.target === event.currentTarget && !isLayerClick) {
       const rect = timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
       
@@ -172,8 +177,13 @@ const TimelineEditor: React.FC<{
       const newTime = pixelsToTime(x + 120); // Add offset back for calculation
       dispatch(setPlayheadTime(Math.max(0, Math.min(newTime, duration))));
       dispatch(clearSelection());
+      
+      // Also clear layer selection when clicking on empty timeline areas
+      if (selectedLayer) {
+        dispatch(clearLayerSelection());
+      }
     }
-  }, [pixelsToTime, duration, dispatch]);
+  }, [pixelsToTime, duration, dispatch, selectedLayer]);
 
   // Handle playhead drag start
   const handlePlayheadDragStart = useCallback((event: React.MouseEvent) => {
@@ -236,10 +246,26 @@ const TimelineEditor: React.FC<{
     }
   });
 
+  // Clear clip selection when layer is selected
+  useEffect(() => {
+    if (selectedLayer && selectedClips.length > 0) {
+      dispatch(clearSelection());
+    }
+  }, [selectedLayer, selectedClips.length, dispatch]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       switch (event.key) {
+        case 'Escape':
+          event.preventDefault();
+          // Clear layer selection
+          if (selectedLayer) {
+            dispatch(clearLayerSelection());
+          }
+          // Also clear clip selection
+          dispatch(clearSelection());
+          break;
         case ' ':
           event.preventDefault();
           // Toggle play/pause
@@ -289,7 +315,7 @@ const TimelineEditor: React.FC<{
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [playheadTime, duration, dispatch]);
+  }, [playheadTime, duration, dispatch, selectedLayer]);
 
   // Handle playhead dragging
   useEffect(() => {
@@ -354,6 +380,7 @@ const TimelineEditor: React.FC<{
                 zoom={zoom}
                 playheadTime={playheadTime}
                 selectedClips={selectedClips}
+                selectedLayer={selectedLayer}
                 onClipClick={handleClipClick}
                 onClipMove={(clipId, newStartTime) => {
                   dispatch(moveClip({

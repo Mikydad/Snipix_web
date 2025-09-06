@@ -1,5 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import styled from 'styled-components';
+import { timelineTimeToVideoTime, getEffectiveTimelineDuration } from '../utils/videoTimeUtils';
+import { Layer } from '../types';
 
 const VideoContainer = styled.div`
   width: 100%;
@@ -93,26 +95,25 @@ interface VideoPreviewProps {
   videoUrl: string;
   currentTime: number;
   isPlaying: boolean;
-  onTimeUpdate?: (time: number) => void;
+  layers: Layer[];
 }
 
 const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
   videoUrl,
   currentTime,
   isPlaying,
-  onTimeUpdate
+  layers
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [duration, setDuration] = React.useState(0);
-  const [currentVideoTime, setCurrentVideoTime] = React.useState(0);
 
   // Sync video with timeline (when timeline changes)
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.currentTime = currentTime;
-      setCurrentVideoTime(currentTime);
+      // Convert timeline time to video time
+      const videoTime = timelineTimeToVideoTime(currentTime, layers);
+      videoRef.current.currentTime = videoTime;
     }
-  }, [currentTime]);
+  }, [currentTime, layers]);
 
   // Sync play state
   useEffect(() => {
@@ -126,20 +127,13 @@ const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
   }, [isPlaying]);
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      const newTime = videoRef.current.currentTime;
-      setCurrentVideoTime(newTime);
-      // Notify parent component of time update
-      if (onTimeUpdate) {
-        onTimeUpdate(newTime);
-      }
-    }
+    // Disabled - timeline controls video time, not the other way around
+    // This prevents conflicts and video getting stuck
   };
 
   const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-    }
+    // Video metadata loaded - no need to store duration locally
+    // The timeline manages the effective duration
   };
 
   const handlePlayPause = () => {
@@ -148,16 +142,16 @@ const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
   };
 
   const handleSeek = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (videoRef.current && duration > 0) {
+    if (effectiveDuration > 0) {
       const rect = event.currentTarget.getBoundingClientRect();
       const clickX = event.clientX - rect.left;
       const percentage = clickX / rect.width;
-      const newTime = percentage * duration;
-      videoRef.current.currentTime = newTime;
-      setCurrentVideoTime(newTime);
-      // Notify parent component
-      if (onTimeUpdate) {
-        onTimeUpdate(newTime);
+      const newTimelineTime = percentage * effectiveDuration;
+      
+      // Convert timeline time to video time and set it
+      const newVideoTime = timelineTimeToVideoTime(newTimelineTime, layers);
+      if (videoRef.current) {
+        videoRef.current.currentTime = newVideoTime;
       }
     }
   };
@@ -168,7 +162,9 @@ const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const progress = duration > 0 ? (currentVideoTime / duration) * 100 : 0;
+  // Calculate effective timeline duration and progress
+  const effectiveDuration = getEffectiveTimelineDuration(layers);
+  const progress = effectiveDuration > 0 ? (currentTime / effectiveDuration) * 100 : 0;
 
   return (
     <VideoContainer>
@@ -185,7 +181,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
           {isPlaying ? '⏸️' : '▶️'}
         </ControlButton>
         <TimeDisplay>
-          {formatTime(currentVideoTime)} / {formatTime(duration)}
+          {formatTime(currentTime)} / {formatTime(effectiveDuration)}
         </TimeDisplay>
       </VideoControls>
       

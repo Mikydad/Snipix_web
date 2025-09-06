@@ -6,7 +6,7 @@ from datetime import datetime
 
 from models.schemas import (
     UploadResponse, TranscribeResponse, RemoveFillersRequest, 
-    RemoveFillersResponse, ApiResponse
+    RemoveFillersResponse, ApiResponse, TrimVideoRequest, TrimVideoResponse
 )
 from services.media_service import media_service
 from services.database import get_projects_collection
@@ -247,5 +247,64 @@ async def get_thumbnail(project_id: str):
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve thumbnail"
+        )
+
+@router.post("/trim-video", response_model=ApiResponse[TrimVideoResponse])
+async def trim_video(request: TrimVideoRequest):
+    """Trim video based on timeline segments (hybrid approach)"""
+    try:
+        # Find project in memory
+        from api.projects import projects_storage
+        project_doc = next((p for p in projects_storage if p["_id"] == request.project_id), None)
+        
+        if not project_doc:
+            raise HTTPException(
+                status_code=404,
+                detail="Project not found"
+            )
+        
+        # Get video file path
+        video_path = project_doc.get("video_path")
+        if not video_path or not os.path.exists(video_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Video file not found"
+            )
+        
+        # Convert segments to the format expected by media service
+        segments = [
+            {
+                "startTime": segment.startTime,
+                "duration": segment.duration
+            }
+            for segment in request.segments
+        ]
+        
+        # Process video segments
+        trimmed_path = media_service.trim_video_segments(video_path, segments)
+        
+        # Get new duration
+        new_duration = media_service.get_video_duration(trimmed_path)
+        
+        # Update project with trimmed video
+        project_doc["trimmed_video_path"] = trimmed_path
+        project_doc["trimmed_duration"] = new_duration
+        project_doc["updated_at"] = datetime.utcnow()
+        
+        return ApiResponse(
+            success=True,
+            data=TrimVideoResponse(
+                trimmed_video_path=trimmed_path,
+                new_duration=new_duration
+            ),
+            message="Video trimmed successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to trim video: {str(e)}"
         )
 

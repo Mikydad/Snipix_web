@@ -118,6 +118,14 @@ class ApiService {
     localStorage.removeItem('token');
     delete this.api.defaults.headers.common.Authorization;
   }
+
+  // Trim video based on timeline segments
+  async trimVideo(projectId: string, segments: Array<{ startTime: number; duration: number }>): Promise<AxiosResponse<any>> {
+    return this.api.post('/media/trim-video', {
+      project_id: projectId,
+      segments: segments
+    });
+  }
 }
 
 export const apiService = new ApiService();

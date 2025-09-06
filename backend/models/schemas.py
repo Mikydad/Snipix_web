@@ -191,3 +191,16 @@ class RenderPreviewRequest(BaseSchema):
     start_time: float
     end_time: float
     quality: str = "medium"  # low, medium, high
+
+# Hybrid trim models
+class VideoSegment(BaseSchema):
+    startTime: float
+    duration: float
+
+class TrimVideoRequest(BaseSchema):
+    project_id: str
+    segments: List[VideoSegment]
+
+class TrimVideoResponse(BaseSchema):
+    trimmed_video_path: str
+    new_duration: float

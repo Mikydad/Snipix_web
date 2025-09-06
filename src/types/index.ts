@@ -39,9 +39,10 @@ export interface TranscriptState {
 export interface Clip {
   id: string;
   type: 'video' | 'audio' | 'text' | 'effect' | 'overlay';
-  startTime: number;
+  startTime: number; // Timeline position
   endTime: number;
   duration: number;
+  originalStartTime?: number; // Original video time (for video clips)
   sourcePath?: string;
   content?: string;
   properties: {
@@ -63,6 +64,8 @@ export interface Layer {
   isLocked: boolean;
   isMuted: boolean;
   order: number;
+  segments?: LayerSegment[]; // Internal segments for trim operations
+  isMainVideo?: boolean; // Flag to identify the main video layer
 }
 
 export interface Keyframe {
@@ -91,6 +94,49 @@ export interface TimelineState {
   isSnapping: boolean;
   undoStack: TimelineState[];
   redoStack: TimelineState[];
+  selectedLayer: string | null; // Currently selected layer for editing
+  trimState: TrimState; // Current trim operation state
+}
+
+// Trim and Delete operation types
+export interface LayerSegment {
+  id: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  isDeleted?: boolean; // Mark segments for deletion
+  originalStartTime?: number; // Track original position for gap filling
+}
+
+export interface TrimRange {
+  startTime: number;
+  endTime: number;
+  layerId: string;
+  isValid: boolean;
+}
+
+export interface TrimState {
+  isActive: boolean; // Whether trim mode is active
+  selectedRange: TrimRange | null; // Currently selected range
+  isDragging: boolean; // Whether user is dragging to select range
+  dragStartTime: number | null; // Start time of drag operation
+  pendingOperations: TrimOperation[]; // Operations waiting to be applied
+}
+
+export interface TrimOperation {
+  id: string;
+  type: 'trim' | 'delete' | 'split';
+  layerId: string;
+  startTime: number;
+  endTime: number;
+  segments: LayerSegment[]; // Affected segments
+  timestamp: number; // When operation was created
+}
+
+export interface DeleteOperation {
+  layerId: string;
+  segmentIds: string[];
+  fillGaps: boolean; // Whether to fill gaps (main video only)
 }
 
 // Auth related types
@@ -134,6 +180,14 @@ export interface RemoveFillersResponse {
     end: number;
     text: string;
   }>;
+}
+
+export interface TrimDeleteResponse {
+  success: boolean;
+  processedVideoPath: string;
+  newDuration: number;
+  operations: TrimOperation[];
+  message: string;
 }
 
 // Component prop types

@@ -1,9 +1,8 @@
 import React, { useCallback } from 'react';
 import styled from 'styled-components';
-import { useGesture } from 'react-use-gesture';
-import { Layer, Clip } from '../types';
+import { Layer } from '../types';
 
-const TrackContainer = styled.div`
+const TrackContainer = styled.div<{ $isSelected: boolean }>`
   height: 80px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
   position: relative;
@@ -11,6 +10,12 @@ const TrackContainer = styled.div`
   display: flex;
   align-items: center;
   padding: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${({ theme }) => theme.colors.surfaceHover};
+  }
 `;
 
 const TrackContent = styled.div`
@@ -32,7 +37,7 @@ const ClipContainer = styled.div<{
   bottom: 10px;
   width: ${({ $width }) => $width}px;
   background: ${({ theme, $type, $isSelected }) => {
-    if ($isSelected) return theme.colors.primary + '40';
+    if ($isSelected) return theme.colors.primary + '30';
     switch ($type) {
       case 'video': return theme.colors.primary + '20';
       case 'audio': return theme.colors.secondary + '20';
@@ -41,8 +46,8 @@ const ClipContainer = styled.div<{
       default: return theme.colors.surfaceHover;
     }
   }};
-  border: 2px solid ${({ theme, $isSelected }) => 
-    $isSelected ? theme.colors.primary : theme.colors.border};
+  border: ${({ $isSelected, theme }) => 
+    $isSelected ? `3px solid ${theme.colors.primary}` : '2px solid ' + theme.colors.border};
   border-radius: 4px;
   cursor: pointer;
   display: flex;
@@ -51,9 +56,13 @@ const ClipContainer = styled.div<{
   font-size: 0.75rem;
   color: ${({ theme }) => theme.colors.text};
   user-select: none;
+  box-shadow: ${({ $isSelected, theme }) => 
+    $isSelected ? `0 0 8px ${theme.colors.primary}40` : 'none'};
   
   &:hover {
     border-color: ${({ theme }) => theme.colors.primary};
+    ${({ $isSelected, theme }) => 
+      !$isSelected ? `box-shadow: 0 0 4px ${theme.colors.primary}20;` : ''}
   }
 `;
 
@@ -84,6 +93,7 @@ interface TimelineTrackProps {
   zoom: number;
   playheadTime: number;
   selectedClips: string[];
+  selectedLayer: string | null;
   onClipClick: (clipId: string, event: React.MouseEvent) => void;
   onClipMove: (clipId: string, newStartTime: number) => void;
 }
@@ -93,9 +103,11 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   zoom,
   playheadTime,
   selectedClips,
+  selectedLayer,
   onClipClick,
   onClipMove
 }) => {
+
   // Convert time to pixels
   const timeToPixels = useCallback((time: number) => {
     const pixelsPerSecond = 100; // Base pixels per second
@@ -139,21 +151,27 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   }, [layer.clips, pixelsToTime]);
 
   return (
-    <TrackContainer>
+    <TrackContainer 
+      $isSelected={false}
+      data-layer-track={layer.id}
+    >
       <TrackContent>
         {layer.clips.map((clip) => {
           const left = timeToPixels(clip.startTime);
           const width = timeToPixels(clip.duration);
-          const isSelected = selectedClips.includes(clip.id);
+          const isClipSelected = selectedClips.includes(clip.id);
 
           return (
             <ClipContainer
               key={clip.id}
               $left={left}
               $width={width}
-              $isSelected={isSelected}
+              $isSelected={isClipSelected}
               $type={clip.type}
-              onClick={(e) => onClipClick(clip.id, e)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClipClick(clip.id, e);
+              }}
               onMouseDown={(e) => {
                 // Handle drag start
                 const handleDrag = (e: MouseEvent) => {

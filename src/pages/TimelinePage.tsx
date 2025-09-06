@@ -10,6 +10,7 @@ import TimelineEditor from '../components/TimelineEditor';
 import VideoPreview from '../components/VideoPreview';
 import TimelineToolbar from '../components/TimelineToolbar';
 import { toast } from 'react-toastify';
+import { useAutoTrim } from '../hooks/useAutoTrim';
 
 const TimelineContainer = styled.div`
   display: flex;
@@ -136,6 +137,9 @@ const TimelinePage: React.FC = () => {
     (state: RootState) => state.timeline
   );
 
+  // Auto-trim hook for automatic backend processing
+  useAutoTrim(projectId);
+
   // Memoize video URL to prevent unnecessary re-renders
   const videoUrl = React.useMemo(() => {
     return projectId ? `/media/${projectId}/video` : '';
@@ -170,6 +174,7 @@ const TimelinePage: React.FC = () => {
           startTime: 0,
           endTime: currentProject.duration,
           duration: currentProject.duration,
+          originalStartTime: 0, // Original video starts at 0
           sourcePath: `/media/${projectId}/video`,
           content: currentProject.name,
           properties: {
@@ -183,7 +188,8 @@ const TimelinePage: React.FC = () => {
         isVisible: true,
         isLocked: false,
         isMuted: false,
-        order: 0
+        order: 0,
+        isMainVideo: true  // Mark as main video layer for gap filling
       };
       
       // Add the video layer if it doesn't exist
@@ -204,10 +210,6 @@ const TimelinePage: React.FC = () => {
 
   const handlePlayPause = () => {
     dispatch(setIsPlaying(!isPlaying));
-  };
-
-  const handleVideoTimeUpdate = (time: number) => {
-    dispatch(setPlayheadTime(time));
   };
 
   // Auto-advance timeline when video is playing
@@ -277,12 +279,12 @@ const TimelinePage: React.FC = () => {
             videoUrl={videoUrl}
             currentTime={playheadTime}
             isPlaying={isPlaying}
-            onTimeUpdate={handleVideoTimeUpdate}
+            layers={layers}
           />
         </VideoSection>
         
         <TimelineSection>
-          <TimelineToolbar />
+          <TimelineToolbar projectId={projectId} />
           <TimelineEditor 
             projectId={projectId || ''}
             layers={layers}

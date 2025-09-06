@@ -175,14 +175,22 @@ class MediaService:
             raise
 
     def trim_video(self, video_path: str, start_time: float, end_time: float) -> str:
-        """Trim video to specified time range"""
+        """Trim video from start_time to end_time"""
         try:
+            duration = end_time - start_time
+            
+            # Create output path
             output_path = os.path.join(
                 self.processed_dir,
                 f"trimmed_{os.path.basename(video_path)}"
             )
             
-            ffmpeg.input(video_path, ss=start_time, to=end_time).output(
+            # Trim video using FFmpeg
+            ffmpeg.input(
+                video_path, 
+                ss=start_time, 
+                t=duration
+            ).output(
                 output_path,
                 acodec='copy',
                 vcodec='copy'
@@ -193,6 +201,87 @@ class MediaService:
             
         except Exception as e:
             logger.error(f"Failed to trim video: {e}")
+            raise
+
+    def trim_video_segments(self, video_path: str, segments: List[Dict[str, Any]]) -> str:
+        """Trim video based on timeline segments (for hybrid approach)"""
+        try:
+            if not segments:
+                return video_path
+            
+            # Sort segments by start time
+            segments.sort(key=lambda x: x['startTime'])
+            
+            # Create output path
+            output_path = os.path.join(
+                self.processed_dir,
+                f"segments_{os.path.basename(video_path)}"
+            )
+            
+            # If only one segment, use simple trim
+            if len(segments) == 1:
+                segment = segments[0]
+                return self.trim_video(
+                    video_path, 
+                    segment['startTime'], 
+                    segment['startTime'] + segment['duration']
+                )
+            
+            # Multiple segments - need to concatenate
+            # Create temporary files for each segment
+            temp_files = []
+            try:
+                for i, segment in enumerate(segments):
+                    temp_path = os.path.join(
+                        self.processed_dir,
+                        f"temp_segment_{i}_{os.path.basename(video_path)}"
+                    )
+                    
+                    # Trim each segment
+                    ffmpeg.input(
+                        video_path, 
+                        ss=segment['startTime'], 
+                        t=segment['duration']
+                    ).output(
+                        temp_path,
+                        acodec='copy',
+                        vcodec='copy'
+                    ).overwrite_output().run(quiet=True)
+                    
+                    temp_files.append(temp_path)
+                
+                # Create concat file for FFmpeg
+                concat_file = os.path.join(self.processed_dir, "concat_list.txt")
+                with open(concat_file, 'w') as f:
+                    for temp_file in temp_files:
+                        f.write(f"file '{temp_file}'\n")
+                
+                # Concatenate segments
+                ffmpeg.input(concat_file, format='concat', safe=0).output(
+                    output_path,
+                    acodec='copy',
+                    vcodec='copy'
+                ).overwrite_output().run(quiet=True)
+                
+                # Cleanup temp files
+                for temp_file in temp_files:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                if os.path.exists(concat_file):
+                    os.remove(concat_file)
+                
+                logger.info(f"Video segments processed: {output_path}")
+                return output_path
+                
+            except Exception as e:
+                # Cleanup on error
+                for temp_file in temp_files:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                raise e
+            
+        except Exception as e:
+            logger.error(f"Failed to trim video segments: {e}")
             raise
 
     def generate_thumbnail(self, video_path: str, time: float = 1.0) -> str:
