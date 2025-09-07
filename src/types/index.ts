@@ -96,6 +96,32 @@ export interface TimelineState {
   redoStack: TimelineState[];
   selectedLayer: string | null; // Currently selected layer for editing
   trimState: TrimState; // Current trim operation state
+  validationState: ValidationState; // Validation and error state
+}
+
+// Validation and error state
+export interface ValidationState {
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+  isValidating: boolean;
+}
+
+export interface ValidationError {
+  id: string;
+  type: 'deletion' | 'trim' | 'boundary' | 'duration';
+  message: string;
+  layerId?: string;
+  clipId?: string;
+  timestamp: number;
+}
+
+export interface ValidationWarning {
+  id: string;
+  type: 'performance' | 'quality' | 'compatibility';
+  message: string;
+  layerId?: string;
+  clipId?: string;
+  timestamp: number;
 }
 
 // Trim and Delete operation types

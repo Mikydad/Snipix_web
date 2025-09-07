@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { TimelineState, Layer, Clip, Keyframe, Marker, ApiResponse, TrimState, TrimRange } from '../../types';
+import { TimelineState, Layer, Clip, Keyframe, Marker, ApiResponse, TrimState, TrimRange, ValidationState, ValidationError, ValidationWarning } from '../../types';
 import { apiService } from '../../services/apiService';
 
 const initialState: TimelineState = {
@@ -20,6 +20,11 @@ const initialState: TimelineState = {
     isDragging: false,
     dragStartTime: null,
     pendingOperations: []
+  },
+  validationState: {
+    errors: [],
+    warnings: [],
+    isValidating: false
   }
 };
 
@@ -574,17 +579,88 @@ const timelineSlice = createSlice({
     // Delete clip by ID (for selected clip deletion)
     deleteClipById: (state, action: PayloadAction<{ layerId: string; clipId: string; projectId?: string }>) => {
       const layer = state.layers.find((l: Layer) => l.id === action.payload.layerId);
-      if (!layer) return;
+      if (!layer) {
+        // Add validation error for layer not found
+        state.validationState.errors.push({
+          id: `layer-not-found-${Date.now()}`,
+          type: 'deletion',
+          message: 'Layer not found. Cannot delete clip.',
+          layerId: action.payload.layerId,
+          timestamp: Date.now()
+        });
+        return;
+      }
 
       // Find the clip to delete
       const clipToDelete = layer.clips.find((clip: Clip) => clip.id === action.payload.clipId);
       
-      if (!clipToDelete) return;
-
-      // Prevent deletion of entire main video layer
-      if (layer.isMainVideo && layer.clips.length === 1) {
-        return; // Don't allow deletion of the only clip in main video
+      if (!clipToDelete) {
+        // Add validation error for clip not found
+        state.validationState.errors.push({
+          id: `clip-not-found-${Date.now()}`,
+          type: 'deletion',
+          message: 'Clip not found. Cannot delete clip.',
+          layerId: action.payload.layerId,
+          clipId: action.payload.clipId,
+          timestamp: Date.now()
+        });
+        return;
       }
+
+      // Comprehensive validation for main video layer
+      if (layer.isMainVideo) {
+        // Prevent deletion of entire main video layer
+        if (layer.clips.length === 1) {
+          state.validationState.errors.push({
+            id: `main-video-empty-${Date.now()}`,
+            type: 'deletion',
+            message: 'Cannot delete the only clip in the main video layer. The main video cannot be empty.',
+            layerId: action.payload.layerId,
+            clipId: action.payload.clipId,
+            timestamp: Date.now()
+          });
+          return;
+        }
+
+        // Check if deleting this clip would leave the main video with no content at the beginning
+        const remainingClips = layer.clips.filter(clip => clip.id !== clipToDelete.id);
+        const hasContentAtStart = remainingClips.some(clip => clip.startTime === 0);
+        
+        if (!hasContentAtStart && clipToDelete.startTime === 0) {
+          // Check if there are other clips that can be moved to start
+          const clipsAfterFirst = remainingClips.filter(clip => clip.startTime > 0);
+          if (clipsAfterFirst.length === 0) {
+            state.validationState.errors.push({
+              id: `main-video-no-start-${Date.now()}`,
+              type: 'deletion',
+              message: 'Cannot delete the first clip if it would leave the main video with no content at the beginning.',
+              layerId: action.payload.layerId,
+              clipId: action.payload.clipId,
+              timestamp: Date.now()
+            });
+            return;
+          }
+        }
+
+        // Check minimum duration requirements
+        const totalRemainingDuration = remainingClips.reduce((sum, clip) => sum + clip.duration, 0);
+        if (totalRemainingDuration < 0.1) { // Minimum 0.1 seconds
+          state.validationState.errors.push({
+            id: `main-video-min-duration-${Date.now()}`,
+            type: 'duration',
+            message: 'Cannot delete clip. The remaining video would be too short (less than 0.1 seconds).',
+            layerId: action.payload.layerId,
+            clipId: action.payload.clipId,
+            timestamp: Date.now()
+          });
+          return;
+        }
+      }
+
+      // Clear any existing validation errors for this operation
+      state.validationState.errors = state.validationState.errors.filter(
+        error => !(error.layerId === action.payload.layerId && error.clipId === action.payload.clipId)
+      );
 
       // Store deleted clip properties before removal
       const deletedStartTime = clipToDelete.startTime;
@@ -622,6 +698,29 @@ const timelineSlice = createSlice({
 
       // Clear selection if the deleted clip was selected
       state.selectedClips = state.selectedClips.filter(clipId => clipId !== action.payload.clipId);
+
+      // Add success message (could be used for toast notifications)
+      console.log(`Successfully deleted clip ${action.payload.clipId} from layer ${action.payload.layerId}`);
+    },
+
+    // Validation actions
+    addValidationError: (state, action: PayloadAction<ValidationError>) => {
+      state.validationState.errors.push(action.payload);
+    },
+    clearValidationErrors: (state) => {
+      state.validationState.errors = [];
+    },
+    removeValidationError: (state, action: PayloadAction<string>) => {
+      state.validationState.errors = state.validationState.errors.filter(error => error.id !== action.payload);
+    },
+    addValidationWarning: (state, action: PayloadAction<ValidationWarning>) => {
+      state.validationState.warnings.push(action.payload);
+    },
+    clearValidationWarnings: (state) => {
+      state.validationState.warnings = [];
+    },
+    setValidating: (state, action: PayloadAction<boolean>) => {
+      state.validationState.isValidating = action.payload;
     },
 
     // Reset timeline
@@ -724,6 +823,12 @@ export const {
   splitLayerAtPlayhead,
   deleteAtPlayhead,
   deleteClipById,
+  addValidationError,
+  clearValidationErrors,
+  removeValidationError,
+  addValidationWarning,
+  clearValidationWarnings,
+  setValidating,
   resetTimeline,
 } = timelineSlice.actions;
 

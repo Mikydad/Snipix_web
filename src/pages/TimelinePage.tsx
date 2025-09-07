@@ -9,8 +9,10 @@ import { Layer } from '../types';
 import TimelineEditor from '../components/TimelineEditor';
 import VideoPreview from '../components/VideoPreview';
 import TimelineToolbar from '../components/TimelineToolbar';
+import ErrorToast from '../components/ErrorToast';
 import { toast } from 'react-toastify';
 import { useAutoTrim } from '../hooks/useAutoTrim';
+import { getEffectiveTimelineDuration } from '../utils/videoTimeUtils';
 
 const TimelineContainer = styled.div`
   display: flex;
@@ -209,19 +211,38 @@ const TimelinePage: React.FC = () => {
   };
 
   const handlePlayPause = () => {
-    dispatch(setIsPlaying(!isPlaying));
+    const effectiveDuration = getEffectiveTimelineDuration(layers);
+    
+    // If we're at the end and user clicks play, restart from beginning
+    if (!isPlaying && playheadTime >= effectiveDuration) {
+      dispatch(setPlayheadTime(0));
+      dispatch(setIsPlaying(true));
+    } else {
+      dispatch(setIsPlaying(!isPlaying));
+    }
   };
 
   // Auto-advance timeline when video is playing
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isPlaying && currentProject?.duration) {
+    if (isPlaying) {
       interval = setInterval(() => {
         const newTime = playheadTimeRef.current + 0.1; // Use ref to get current time
-        if (newTime <= (currentProject.duration || 0)) {
+        const effectiveDuration = getEffectiveTimelineDuration(layers);
+        
+        console.log('DEBUG: Auto-advance', {
+          currentTime: playheadTimeRef.current,
+          newTime,
+          effectiveDuration,
+          shouldStop: newTime > effectiveDuration
+        });
+        
+        if (newTime < effectiveDuration) {
           dispatch(setPlayheadTime(newTime));
         } else {
-          // Stop playing when we reach the end
+          // Stop playing and clamp playhead to exact end
+          console.log('DEBUG: Stopping at timeline end');
+          dispatch(setPlayheadTime(effectiveDuration));
           dispatch(setIsPlaying(false));
         }
       }, 100);
@@ -231,7 +252,7 @@ const TimelinePage: React.FC = () => {
         clearInterval(interval);
       }
     };
-  }, [isPlaying, currentProject?.duration, dispatch]); // Removed playheadTime dependency
+  }, [isPlaying, layers, dispatch]); // Use layers instead of currentProject.duration
 
   if (projectLoading) {
     return (
@@ -262,6 +283,7 @@ const TimelinePage: React.FC = () => {
 
   return (
     <TimelineContainer>
+      <ErrorToast />
       <Header>
         <Title>{currentProject.name} - Timeline Editor</Title>
         <div style={{ display: 'flex', gap: '1rem' }}>
