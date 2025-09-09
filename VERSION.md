@@ -2,7 +2,7 @@
 
 ## Version 1.2.0 - MongoDB Integration & Video Processing Fixes
 **Release Date**: September 8, 2025  
-**Commit Hash**: [To be filled after commit]
+**Commit Hash**: 79a8f615
 
 ### 🎯 Major Features Fixed
 - ✅ **MongoDB Integration**: Complete migration from in-memory storage to MongoDB
