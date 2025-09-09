@@ -186,51 +186,51 @@ def is_db_available():
 # Database collections
 def get_users_collection():
     """Get users collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().users
+    return async_db.users
 
 def get_projects_collection():
     """Get projects collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().projects
+    return async_db.projects
 
 def get_clips_collection():
     """Get clips collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().clips
+    return async_db.clips
 
 def get_timeline_collection():
     """Get timeline collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().timeline
+    return async_db.timeline
 
 def get_timeline_states_collection():
     """Get timeline states collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().timeline_states
+    return async_db.timeline_states
 
 def get_transcriptions_collection():
     """Get transcriptions collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().transcriptions
+    return async_db.transcriptions
 
 def get_user_sessions_collection():
     """Get user sessions collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().user_sessions
+    return async_db.user_sessions
 
 def get_audit_logs_collection():
     """Get audit logs collection"""
-    if not db_available:
+    if async_db is None:
         raise RuntimeError("Database not available")
-    return get_async_db().audit_logs
+    return async_db.audit_logs
 
 
 # Database health check functions

@@ -53,26 +53,40 @@ class ErrorHandler:
     @staticmethod
     def handle_validation_error(error: RequestValidationError) -> Dict[str, Any]:
         """Handle request validation errors"""
+        # Convert error details to serializable format
+        serializable_errors = []
+        for err in error.errors():
+            serializable_err = {
+                "type": err.get("type", "unknown"),
+                "loc": list(err.get("loc", [])),
+                "msg": str(err.get("msg", "Validation error")),
+                "input": str(err.get("input", "")) if err.get("input") is not None else None
+            }
+            serializable_errors.append(serializable_err)
+        
         error_info = {
             "error_type": "ValidationError",
             "timestamp": datetime.now().isoformat(),
             "message": "Request validation failed",
-            "details": error.errors(),
+            "details": serializable_errors,
             "user_message": "Invalid request data. Please check your input."
         }
         
-        logger.warning(f"Validation error: {error.errors()}")
+        logger.warning(f"Validation error: {serializable_errors}")
         return error_info
     
     @staticmethod
     def handle_http_error(error: HTTPException) -> Dict[str, Any]:
         """Handle HTTP exceptions"""
+        # Use the specific error detail if it's user-friendly, otherwise use generic message
+        user_message = error.detail if len(error.detail) < 100 and not error.detail.startswith("Internal Server Error") else "An unexpected error occurred. Please try again."
+        
         error_info = {
             "error_type": "HTTPException",
             "status_code": error.status_code,
             "timestamp": datetime.now().isoformat(),
             "message": error.detail,
-            "user_message": get_user_friendly_message(error)
+            "user_message": user_message
         }
         
         if error.status_code >= 500:

@@ -1,7 +1,9 @@
 # Snipix Backend - Version Info
 
 ## Version 1.2.0
-**Commit Hash**: 79a8f615  
+**Release Date**: September 8, 2025  
+**Python Version**: 3.13  
+**FastAPI Version**: Latest  
 
 ### Backend Version History
 - **v1.0.0**: Initial release with in-memory storage

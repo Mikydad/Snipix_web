@@ -117,7 +117,25 @@ const timelineSlice = createSlice({
 
     // Layer management
     addLayer: (state, action: PayloadAction<Layer>) => {
-      state.layers.push(action.payload);
+      const newLayer = action.payload;
+      
+      // Prevent duplicate main video layers
+      if (newLayer.isMainVideo === true) {
+        // Remove any existing main video layers
+        state.layers = state.layers.filter(layer => layer.isMainVideo !== true);
+        console.log('DEBUG: Removed existing main video layers, adding new one:', newLayer.id);
+      }
+      
+      // Check if layer with same ID already exists
+      const existingLayerIndex = state.layers.findIndex(layer => layer.id === newLayer.id);
+      if (existingLayerIndex !== -1) {
+        console.log('DEBUG: Layer with ID already exists, replacing:', newLayer.id);
+        state.layers[existingLayerIndex] = newLayer;
+      } else {
+        console.log('DEBUG: Adding new layer:', newLayer.id);
+        state.layers.push(newLayer);
+      }
+      
       state.layers.sort((a, b) => a.order - b.order);
     },
     removeLayer: (state, action: PayloadAction<string>) => {

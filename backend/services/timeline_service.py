@@ -149,8 +149,17 @@ class TimelineService:
             if not timeline_doc:
                 return None
             
-            # Convert to TimelineStateDocument
+            # Convert to TimelineStateDocument with default values for missing fields
             timeline_doc["_id"] = str(timeline_doc["_id"])
+            
+            # Add default values for missing required fields
+            if "created_by" not in timeline_doc:
+                timeline_doc["created_by"] = user_id
+            if "version" not in timeline_doc:
+                timeline_doc["version"] = 1
+            if "is_current" not in timeline_doc:
+                timeline_doc["is_current"] = True
+                
             timeline_state = TimelineStateDocument(**timeline_doc)
             
             # Create audit log
@@ -188,8 +197,17 @@ class TimelineService:
             if not timeline_doc:
                 return None
             
-            # Convert to TimelineStateDocument
+            # Convert to TimelineStateDocument with default values for missing fields
             timeline_doc["_id"] = str(timeline_doc["_id"])
+            
+            # Add default values for missing required fields
+            if "created_by" not in timeline_doc:
+                timeline_doc["created_by"] = user_id
+            if "version" not in timeline_doc:
+                timeline_doc["version"] = version
+            if "is_current" not in timeline_doc:
+                timeline_doc["is_current"] = False
+                
             timeline_state = TimelineStateDocument(**timeline_doc)
             
             # Create audit log

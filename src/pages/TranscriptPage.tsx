@@ -190,11 +190,60 @@ const TranscriptPage: React.FC = () => {
     }
   }, [projectId, dispatch]);
 
+  // Fetch video as blob with authentication
   useEffect(() => {
-    if (currentProject) {
-              // Set video URL for preview
-        setVideoUrl(`/media/${currentProject._id}/video`);
-    }
+    if (!currentProject?._id) return;
+
+    const fetchVideoBlob = async () => {
+      try {
+        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8001';
+        const videoApiUrl = `${apiBaseUrl}/media/${currentProject._id}/video`;
+        
+        // Get auth token
+        const tokens = localStorage.getItem('auth_tokens');
+        if (!tokens) {
+          console.error('No auth tokens found');
+          return;
+        }
+
+        const parsedTokens = JSON.parse(tokens);
+        const accessToken = parsedTokens.access_token || parsedTokens.accessToken;
+        
+        if (!accessToken) {
+          console.error('No access token found');
+          return;
+        }
+
+        // Fetch video with authentication
+        const response = await fetch(videoApiUrl, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch video: ${response.status}`);
+        }
+
+        // Create blob URL
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        setVideoUrl(blobUrl);
+
+        console.log('✅ Video blob URL created for transcript:', blobUrl);
+      } catch (error) {
+        console.error('❌ Failed to fetch video blob for transcript:', error);
+      }
+    };
+
+    fetchVideoBlob();
+
+    // Cleanup blob URL on unmount
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
   }, [currentProject]);
 
   const handleTranscribe = async () => {

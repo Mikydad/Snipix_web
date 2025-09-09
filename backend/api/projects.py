@@ -1,21 +1,13 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Header
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional
 from datetime import datetime
 
 from models.schemas import Project, ProjectCreate, ProjectUpdate, ApiResponse
 from services.project_service import project_service
 from utils.error_handlers import handle_database_error, get_user_friendly_message
+from middleware.auth_middleware import get_current_user_id
 
 router = APIRouter()
-
-# Dependency to get user ID from headers (in a real app, this would be from JWT token)
-async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> str:
-    """Get current user ID from headers"""
-    if not x_user_id:
-        # For testing purposes, use a default user ID
-        # Generate a consistent default user ID
-        return "507f1f77bcf86cd799439011"  # Default test user ID
-    return x_user_id
 
 @router.get("/", response_model=ApiResponse[List[Project]])
 async def get_projects(user_id: str = Depends(get_current_user_id)):
@@ -53,36 +45,6 @@ async def create_project(project_data: ProjectCreate, user_id: str = Depends(get
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=get_user_friendly_message(e)
-        )
-
-@router.get("/{project_id}/debug")
-async def get_project_debug(project_id: str):
-    """Get project by ID (debug version without Pydantic)"""
-    try:
-        # Find project in memory
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        
-        if not project_doc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found"
-            )
-        
-        print(f"DEBUG: Raw project duration: {project_doc.get('duration')} (type: {type(project_doc.get('duration'))})")
-        
-        # Return raw JSON without Pydantic processing
-        return {
-            "success": True,
-            "data": project_doc,
-            "message": "Project found (debug)"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch project"
         )
 
 @router.get("/{project_id}", response_model=ApiResponse[Project])

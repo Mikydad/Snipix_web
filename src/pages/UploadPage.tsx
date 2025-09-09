@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import styled from 'styled-components';
@@ -202,7 +202,7 @@ const UploadPage: React.FC = () => {
       setLocalFileMetadata(null);
       setProjectId(null);
     }
-  }, []);
+  }, [localFileMetadata, projectId, uploadSuccess]);
 
   // Debug: Monitor state changes and persist to localStorage
   React.useEffect(() => {
@@ -412,7 +412,7 @@ const UploadPage: React.FC = () => {
             <UploadIcon>🎉</UploadIcon>
             <UploadTitle>Upload Successful!</UploadTitle>
             <UploadDescription>
-              Your video has been uploaded successfully. Click below to go to the transcript page.
+              Your video has been uploaded successfully. You can now work with this project or start a new one.
             </UploadDescription>
             <ProgressContainer>
               <ProgressBar $progress={100} />
@@ -423,9 +423,13 @@ const UploadPage: React.FC = () => {
                 $primary 
                 onClick={(e) => {
                   e.stopPropagation(); // Prevent event bubbling to dropzone
+                  // Store project ID before clearing
+                  const currentProjectId = projectIdRef.current;
+                  // Clear upload state before navigating
+                  handleClear();
                   // Navigate to transcript page
-                  if (projectIdRef.current) {
-                    navigate(`/transcript/${projectIdRef.current}`);
+                  if (currentProjectId) {
+                    navigate(`/transcript/${currentProjectId}`);
                   } else {
                     toast.error('Project ID not found');
                   }
@@ -433,8 +437,12 @@ const UploadPage: React.FC = () => {
               >
                 Go to Transcript
               </Button>
-              <Button onClick={(e) => { e.stopPropagation(); handleClear(); }}>
-                Upload Another Video
+              <Button onClick={(e) => { 
+                e.stopPropagation(); 
+                handleClear();
+                toast.success('Ready for new upload!');
+              }}>
+                Start New Project
               </Button>
             </ActionButtons>
           </>

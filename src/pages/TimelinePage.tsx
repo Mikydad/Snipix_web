@@ -143,10 +143,69 @@ const TimelinePage: React.FC = () => {
   // Auto-trim hook for automatic backend processing
   useAutoTrim(projectId);
 
+  // State for video blob URL
+  const [videoBlobUrl, setVideoBlobUrl] = React.useState<string>('');
+
+  // Fetch video as blob with authentication
+  React.useEffect(() => {
+    if (!projectId) return;
+
+    const fetchVideoBlob = async () => {
+      try {
+        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8001';
+        const videoUrl = `${apiBaseUrl}/media/${projectId}/video`;
+        
+        // Get auth token
+        const tokens = localStorage.getItem('auth_tokens');
+        if (!tokens) {
+          console.error('No auth tokens found');
+          return;
+        }
+
+        const parsedTokens = JSON.parse(tokens);
+        const accessToken = parsedTokens.access_token || parsedTokens.accessToken;
+        
+        if (!accessToken) {
+          console.error('No access token found');
+          return;
+        }
+
+        // Fetch video with authentication
+        const response = await fetch(videoUrl, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch video: ${response.status}`);
+        }
+
+        // Create blob URL
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        setVideoBlobUrl(blobUrl);
+
+        console.log('✅ Video blob URL created:', blobUrl);
+      } catch (error) {
+        console.error('❌ Failed to fetch video blob:', error);
+      }
+    };
+
+    fetchVideoBlob();
+
+    // Cleanup blob URL on unmount
+    return () => {
+      if (videoBlobUrl) {
+        URL.revokeObjectURL(videoBlobUrl);
+      }
+    };
+  }, [projectId]);
+
   // Memoize video URL to prevent unnecessary re-renders
   const videoUrl = React.useMemo(() => {
-    return projectId ? `/media/${projectId}/video` : '';
-  }, [projectId]);
+    return videoBlobUrl;
+  }, [videoBlobUrl]);
 
   // Use ref to track current playhead time for auto-advance
   const playheadTimeRef = React.useRef(playheadTime);
@@ -161,24 +220,28 @@ const TimelinePage: React.FC = () => {
 
   // Set timeline duration when project loads
   useEffect(() => {
-    if (currentProject && currentProject.duration) {
+    if (currentProject && currentProject.duration && projectId) {
       console.log('DEBUG: Project duration received:', currentProject.duration, 'type:', typeof currentProject.duration);
       console.log('DEBUG: Full project object:', currentProject);
+      
       dispatch(setDuration(currentProject.duration));
       
-      // Create a video layer with the uploaded video
+      // Create video layer immediately - let Redux handle duplicates
+      console.log('DEBUG: Creating video layer for project:', projectId);
+      
+      const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8001';
       const videoLayer: Layer = {
-        id: 'video-layer-1',
+        id: `video-layer-${projectId}`, // Use projectId to make it unique
         name: 'Video',
         type: 'video',
         clips: [{
-          id: 'video-clip-1',
+          id: `video-clip-${projectId}`,
           type: 'video',
           startTime: 0,
           endTime: currentProject.duration,
           duration: currentProject.duration,
           originalStartTime: 0, // Original video starts at 0
-          sourcePath: `/media/${projectId}/video`,
+          sourcePath: `${apiBaseUrl}/media/${projectId}/video`,
           content: currentProject.name,
           properties: {
             volume: 1.0,
@@ -195,12 +258,10 @@ const TimelinePage: React.FC = () => {
         isMainVideo: true  // Mark as main video layer for gap filling
       };
       
-      // Add the video layer if it doesn't exist
-      if (layers.length === 0) {
-        dispatch(addLayer(videoLayer));
-      }
+      dispatch(addLayer(videoLayer));
+      console.log('DEBUG: Video layer dispatched for project:', projectId);
     }
-  }, [currentProject, dispatch, projectId]); // Removed layers.length dependency
+  }, [currentProject, dispatch, projectId]);
 
   const handleBack = () => {
     navigate('/projects');
@@ -281,8 +342,7 @@ const TimelinePage: React.FC = () => {
         <Title>{currentProject.name} - Timeline Editor</Title>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <HeaderProgress 
-            isVisible={validationState.isValidating} 
-            message="Processing video..." 
+            isProcessing={validationState.isValidating} 
           />
           <PlayPauseButton onClick={handlePlayPause}>
             {isPlaying ? '⏸️ Pause' : '▶️ Play'}

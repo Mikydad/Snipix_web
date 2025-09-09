@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Header
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from typing import List, Optional
 import os
@@ -11,17 +11,9 @@ from models.schemas import (
 from services.media_service import media_service
 from services.project_service import project_service
 from utils.error_handlers import handle_database_error, get_user_friendly_message
+from middleware.auth_middleware import get_current_user_id
 
 router = APIRouter()
-
-# Dependency to get user ID from headers (in a real app, this would be from JWT token)
-async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> str:
-    """Get current user ID from headers"""
-    if not x_user_id:
-        # For testing purposes, use a default user ID
-        # Generate a consistent default user ID
-        return "507f1f77bcf86cd799439011"  # Default test user ID
-    return x_user_id
 
 @router.post("/upload", response_model=ApiResponse[UploadResponse])
 async def upload_media(

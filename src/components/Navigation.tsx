@@ -1,8 +1,7 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { useAppSelector, useAppDispatch } from '../redux/store';
-import { logout } from '../redux/slices/authSlice';
+import { useAuth } from '../contexts/AuthContext';
 
 const NavContainer = styled.nav`
   position: fixed;
@@ -10,49 +9,52 @@ const NavContainer = styled.nav`
   left: 0;
   right: 0;
   height: 60px;
-  background: ${({ theme }) => theme.colors.surface};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 ${({ theme }) => theme.spacing.lg};
+  padding: 0 24px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 `;
 
 const Logo = styled(Link)`
   font-size: 1.5rem;
   font-weight: bold;
-  color: ${({ theme }) => theme.colors.primary};
+  color: #3b82f6;
   text-decoration: none;
   
   &:hover {
-    color: ${({ theme }) => theme.colors.primaryHover};
+    color: #2563eb;
   }
 `;
 
 const NavLinks = styled.div`
   display: flex;
   align-items: center;
-  gap: ${({ theme }) => theme.spacing.lg};
+  gap: 24px;
 `;
 
 const NavLink = styled(Link)<{ $active?: boolean }>`
-  color: ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.text};
+  color: ${props => props.$active ? '#3b82f6' : '#374151'};
   text-decoration: none;
-  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
-  border-radius: ${({ theme }) => theme.borderRadius.md};
+  padding: 8px 16px;
+  border-radius: 8px;
   transition: all 0.2s ease;
+  font-size: 14px;
+  font-weight: 500;
   
   &:hover {
-    background: ${({ theme }) => theme.colors.surfaceHover};
-    color: ${({ theme }) => theme.colors.primary};
+    background: #f3f4f6;
+    color: #3b82f6;
   }
 `;
 
 const UserSection = styled.div`
   display: flex;
   align-items: center;
-  gap: ${({ theme }) => theme.spacing.md};
+  gap: 16px;
 `;
 
 const UserInfo = styled.div`
@@ -62,84 +64,188 @@ const UserInfo = styled.div`
 `;
 
 const UserName = styled.span`
-  font-size: 0.875rem;
-  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  color: #374151;
   font-weight: 500;
 `;
 
 const UserEmail = styled.span`
-  font-size: 0.75rem;
-  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 12px;
+  color: #6b7280;
 `;
 
-const LogoutButton = styled.button`
-  background: ${({ theme }) => theme.colors.error};
+const UserMenu = styled.div`
+  position: relative;
+`;
+
+const UserAvatar = styled.button`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #3b82f6;
   color: white;
   border: none;
-  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
-  border-radius: ${({ theme }) => theme.borderRadius.md};
   cursor: pointer;
-  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
   transition: all 0.2s ease;
-  
+
   &:hover {
-    background: ${({ theme }) => theme.colors.error}dd;
+    background: #2563eb;
+  }
+`;
+
+const DropdownMenu = styled.div<{ $isOpen: boolean }>`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  min-width: 200px;
+  z-index: 1000;
+  display: ${props => props.$isOpen ? 'block' : 'none'};
+`;
+
+const DropdownItem = styled(Link)`
+  display: block;
+  padding: 12px 16px;
+  color: #374151;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f9fafb;
+    color: #1f2937;
+  }
+
+  &:first-child {
+    border-radius: 8px 8px 0 0;
+  }
+
+  &:last-child {
+    border-radius: 0 0 8px 8px;
+  }
+`;
+
+const DropdownButton = styled.button`
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  color: #dc2626;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #fef2f2;
+    color: #b91c1c;
   }
 `;
 
 const LoginButton = styled(Link)`
-  background: ${({ theme }) => theme.colors.primary};
+  background: #3b82f6;
   color: white;
   border: none;
-  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
-  border-radius: ${({ theme }) => theme.borderRadius.md};
+  padding: 8px 16px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 14px;
+  font-weight: 500;
   text-decoration: none;
   transition: all 0.2s ease;
   
   &:hover {
-    background: ${({ theme }) => theme.colors.primaryHover};
+    background: #2563eb;
   }
 `;
 
 const Navigation: React.FC = () => {
   const location = useLocation();
-  const dispatch = useAppDispatch();
-  const { user, isAuthenticated } = useAppSelector(state => state.auth);
+  const navigate = useNavigate();
+  const { logout, state } = useAuth();
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  const handleLogout = () => {
-    dispatch(logout());
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const isActive = (path: string) => location.pathname === path;
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <NavContainer>
       <Logo to="/">Snipix</Logo>
       
-      <NavLinks>
-        <NavLink to="/" $active={isActive('/')}>
-          Home
-        </NavLink>
-        <NavLink to="/projects" $active={isActive('/projects')}>
-          Projects
-        </NavLink>
-        <NavLink to="/upload" $active={isActive('/upload')}>
-          Upload
-        </NavLink>
-      </NavLinks>
+      {state.isAuthenticated && (
+        <NavLinks>
+          <NavLink to="/" $active={isActive('/')}>
+            Home
+          </NavLink>
+          <NavLink to="/projects" $active={isActive('/projects')}>
+            Projects
+          </NavLink>
+          <NavLink to="/upload" $active={isActive('/upload')}>
+            Upload
+          </NavLink>
+          {state.user?.role === 'admin' && (
+            <NavLink to="/admin" $active={isActive('/admin')}>
+              Admin
+            </NavLink>
+          )}
+        </NavLinks>
+      )}
 
       <UserSection>
-        {isAuthenticated && user ? (
+        {state.isAuthenticated && state.user ? (
           <>
             <UserInfo>
-              <UserName>{user.name}</UserName>
-              <UserEmail>{user.email}</UserEmail>
+              <UserName>{state.user.name}</UserName>
+              <UserEmail>{state.user.email}</UserEmail>
             </UserInfo>
-            <LogoutButton onClick={handleLogout}>
-              Logout
-            </LogoutButton>
+            <UserMenu>
+              <UserAvatar onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}>
+                {state.user.avatar_url ? (
+                  <img 
+                    src={state.user.avatar_url} 
+                    alt={state.user.name}
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  getInitials(state.user.name)
+                )}
+              </UserAvatar>
+              <DropdownMenu $isOpen={isUserMenuOpen}>
+                <DropdownItem to="/profile">Profile Settings</DropdownItem>
+                {state.user.role === 'admin' && (
+                  <DropdownItem to="/admin">Admin Dashboard</DropdownItem>
+                )}
+                <DropdownButton onClick={handleLogout}>
+                  Logout
+                </DropdownButton>
+              </DropdownMenu>
+            </UserMenu>
           </>
         ) : (
           <LoginButton to="/login">
@@ -152,4 +258,3 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
-

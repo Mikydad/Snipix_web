@@ -1,8 +1,9 @@
 """
 Timeline API endpoints for MongoDB Integration
 """
-from fastapi import APIRouter, HTTPException, status, Depends, Header
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional
+from datetime import datetime
 
 from models.schemas import (
     TimelineStateDocument, TimelineStateCreate, TimelineStateUpdate, 
@@ -10,16 +11,9 @@ from models.schemas import (
 )
 from services.timeline_service import timeline_service
 from utils.error_handlers import handle_database_error, get_user_friendly_message
+from middleware.auth_middleware import get_current_user_id
 
 router = APIRouter()
-
-# Dependency to get user ID from headers (in a real app, this would be from JWT token)
-async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> str:
-    """Get current user ID from headers"""
-    if not x_user_id:
-        # For testing purposes, use a default user ID
-        return "507f1f77bcf86cd799439011"  # Default test user ID
-    return x_user_id
 
 
 @router.post("/", response_model=ApiResponse[TimelineStateDocument])
@@ -45,7 +39,58 @@ async def save_timeline_state(
         )
 
 
-@router.get("/{project_id}/current", response_model=ApiResponse[TimelineStateDocument])
+@router.get("/{project_id}", response_model=ApiResponse[TimelineStateDocument])
+async def get_timeline_state(
+    project_id: str, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """Get timeline state for a project (returns empty state if none exists)"""
+    try:
+        timeline_state = await timeline_service.get_current_timeline_state(project_id, user_id)
+        
+        if not timeline_state:
+            # Return empty timeline state for new projects
+            from models.schemas import TimelineStateDocument, TimelineState
+            empty_timeline_state = TimelineStateDocument(
+                project_id=project_id,
+                timeline_state=TimelineState(
+                    layers=[],
+                    playhead_time=0.0,
+                    zoom=1.0,
+                    duration=0.0,
+                    markers=[],
+                    selected_clips=[],
+                    is_playing=False,
+                    is_snapping=True
+                ),
+                version=1,
+                is_current=True,
+                created_by=user_id,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            return ApiResponse(
+                success=True,
+                data=empty_timeline_state,
+                message="Empty timeline state created for new project"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=timeline_state,
+            message="Timeline state retrieved successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "get_timeline_state")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+
 async def get_current_timeline_state(
     project_id: str, 
     user_id: str = Depends(get_current_user_id)
