@@ -103,20 +103,11 @@ const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const handlePlayPause = () => {
     const effectiveDuration = getEffectiveTimelineDuration(layers);
     
-    console.log('DEBUG: TimelineToolbar handlePlayPause called', {
-      isPlaying,
-      playheadTime,
-      effectiveDuration,
-      atEnd: playheadTime >= effectiveDuration
-    });
-    
     // If we're at the end and user clicks play, restart from beginning
     if (!isPlaying && playheadTime >= effectiveDuration) {
-      console.log('DEBUG: TimelineToolbar restarting - setting playhead to 0 and isPlaying to true');
       dispatch(setPlayheadTime(0));
       dispatch(setIsPlaying(true));
     } else {
-      console.log('DEBUG: TimelineToolbar normal toggle - setting isPlaying to', !isPlaying);
       dispatch(setIsPlaying(!isPlaying));
     }
   };

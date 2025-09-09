@@ -18,7 +18,8 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        ignoredActions: ['persist/PERSIST'],
+        ignoredActions: ['persist/PERSIST', 'upload/setFile'],
+        ignoredPaths: ['upload.file'],
       },
     }),
 });

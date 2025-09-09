@@ -12,8 +12,15 @@ export interface Project {
 }
 
 // Upload related types
+export interface FileMetadata {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+}
+
 export interface UploadState {
-  file: File | null;
+  file: FileMetadata | null;
   progress: number;
   isUploading: boolean;
   error: string | null;

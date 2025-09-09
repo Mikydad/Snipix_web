@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { UploadState, UploadResponse, ApiResponse } from '../../types';
+import { UploadState, UploadResponse, ApiResponse, FileMetadata } from '../../types';
 import { apiService } from '../../services/apiService';
 
 const initialState: UploadState = {
@@ -42,7 +42,7 @@ const uploadSlice = createSlice({
   name: 'upload',
   initialState,
   reducers: {
-    setFile: (state, action: PayloadAction<File | null>) => {
+    setFile: (state, action: PayloadAction<FileMetadata | null>) => {
       state.file = action.payload;
       state.error = null;
     },

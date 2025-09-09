@@ -1,0 +1,38 @@
+{
+  "projects": [
+    {
+      "_id": "68bece27fe5513fae995fef9",
+      "name": "Sample Project 3",
+      "description": "Third sample project",
+      "user_id": "68bece20fe5513fae995fef2",
+      "created_at": "2025-09-08T05:37:59.792000",
+      "updated_at": "2025-09-08T05:37:59.792000",
+      "thumbnail": null,
+      "duration": null
+    },
+    {
+      "_id": "68bece27fe5513fae995fef7",
+      "name": "Sample Project 2",
+      "description": "Second sample project",
+      "user_id": "68bece20fe5513fae995fef2",
+      "created_at": "2025-09-08T05:37:59.383000",
+      "updated_at": "2025-09-08T05:37:59.383000",
+      "thumbnail": null,
+      "duration": null
+    },
+    {
+      "_id": "68bece26fe5513fae995fef5",
+      "name": "Sample Project 1",
+      "description": "First sample project",
+      "user_id": "68bece20fe5513fae995fef2",
+      "created_at": "2025-09-08T05:37:58.987000",
+      "updated_at": "2025-09-08T05:37:58.987000",
+      "thumbnail": null,
+      "duration": null
+    }
+  ],
+  "timeline_states": [],
+  "transcriptions": [],
+  "export_timestamp": "2025-09-08T05:38:05.885506",
+  "user_id": "68bece20fe5513fae995fef2"
+}

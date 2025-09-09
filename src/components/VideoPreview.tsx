@@ -112,17 +112,8 @@ const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
       // Convert timeline time to video time
       const videoTime = timelineTimeToVideoTime(currentTime, layers);
       
-      console.log('DEBUG: Video sync effect', {
-        currentTime,
-        videoTime,
-        videoCurrentTime: videoRef.current.currentTime,
-        isPlaying,
-        restartDetected: currentTime === 0 && videoRef.current.currentTime > 0
-      });
-      
       // If we're restarting (jumping from end to beginning), pause first then reset
       if (currentTime === 0 && videoRef.current.currentTime > 0) {
-        console.log('DEBUG: Restarting video - pausing and resetting to 0');
         videoRef.current.pause();
         videoRef.current.currentTime = 0;
       } else {
@@ -134,12 +125,6 @@ const VideoPreview: React.FC<VideoPreviewProps> = React.memo(({
   // Sync play state
   useEffect(() => {
     if (videoRef.current) {
-      console.log('DEBUG: Play state effect', {
-        isPlaying,
-        videoCurrentTime: videoRef.current.currentTime,
-        videoPaused: videoRef.current.paused
-      });
-      
       if (isPlaying) {
         videoRef.current.play().catch(console.error);
       } else {

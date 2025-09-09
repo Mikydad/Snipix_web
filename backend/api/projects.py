@@ -1,66 +1,58 @@
-from fastapi import APIRouter, HTTPException, status
-from typing import List
+from fastapi import APIRouter, HTTPException, status, Depends, Header
+from typing import List, Optional
 from datetime import datetime
 
 from models.schemas import Project, ProjectCreate, ProjectUpdate, ApiResponse
+from services.project_service import project_service
+from utils.error_handlers import handle_database_error, get_user_friendly_message
 
 router = APIRouter()
 
-# Temporary in-memory storage for testing (since MongoDB is offline)
-projects_storage = []
-project_counter = 0
+# Dependency to get user ID from headers (in a real app, this would be from JWT token)
+async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> str:
+    """Get current user ID from headers"""
+    if not x_user_id:
+        # For testing purposes, use a default user ID
+        # Generate a consistent default user ID
+        return "507f1f77bcf86cd799439011"  # Default test user ID
+    return x_user_id
 
 @router.get("/", response_model=ApiResponse[List[Project]])
-async def get_projects():
+async def get_projects(user_id: str = Depends(get_current_user_id)):
     """Get all projects for current user"""
     try:
-        # Return in-memory projects for testing
+        projects = await project_service.get_projects(user_id)
+        
         return ApiResponse(
             success=True,
-            data=[Project(**project) for project in projects_storage],
-            message=f"Found {len(projects_storage)} projects"
+            data=projects,
+            message=f"Found {len(projects)} projects"
         )
         
     except Exception as e:
+        error = handle_database_error(e, "get_projects")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch projects"
+            detail=get_user_friendly_message(e)
         )
 
 @router.post("/", response_model=ApiResponse[Project])
-async def create_project(project_data: ProjectCreate):
+async def create_project(project_data: ProjectCreate, user_id: str = Depends(get_current_user_id)):
     """Create new project"""
     try:
-        global project_counter
-        project_counter += 1
-        
-        # Create project document
-        project_doc = {
-            "_id": f"project_{project_counter}",
-            "name": project_data.name,
-            "description": project_data.description,
-            "user_id": "test_user",  # Temporary test user ID
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-            "thumbnail": None,
-            "duration": None,
-            "timeline_state": None,
-            "transcript_state": None
-        }
-        
-        # Store in memory
-        projects_storage.append(project_doc)
+        project = await project_service.create_project(project_data, user_id)
         
         return ApiResponse(
             success=True,
-            data=Project(**project_doc),
+            data=project,
             message="Project created successfully"
         )
         
     except Exception as e:
+        error = handle_database_error(e, "create_project")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create project"
+            detail=get_user_friendly_message(e)
         )
 
 @router.get("/{project_id}/debug")
@@ -94,47 +86,109 @@ async def get_project_debug(project_id: str):
         )
 
 @router.get("/{project_id}", response_model=ApiResponse[Project])
-async def get_project(project_id: str):
+async def get_project(project_id: str, user_id: str = Depends(get_current_user_id)):
     """Get project by ID"""
     try:
-        # Find project in memory
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
+        project = await project_service.get_project(project_id, user_id)
         
-        if not project_doc:
+        if not project:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Project not found"
             )
         
-        print(f"DEBUG: Project duration in storage: {project_doc.get('duration')} (type: {type(project_doc.get('duration'))})")
-        
-        # Test: Force the duration to be a specific value to see if the issue is in serialization
-        if project_doc.get('duration'):
-            test_duration = float(project_doc.get('duration'))
-            print(f"DEBUG: Test duration conversion: {test_duration} (type: {type(test_duration)})")
-            project_doc['duration'] = test_duration
-        
         return ApiResponse(
             success=True,
-            data=Project(**project_doc),
+            data=project,
             message="Project found"
         )
         
     except HTTPException:
         raise
     except Exception as e:
+        error = handle_database_error(e, "get_project")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch project"
+            detail=get_user_friendly_message(e)
         )
 
-# Comment out other endpoints for now to focus on upload testing
-# @router.put("/{project_id}", response_model=ApiResponse[Project])
-# async def update_project(project_id: str, project_data: ProjectUpdate):
-#     """Update project - temporarily disabled"""
-#     pass
+@router.put("/{project_id}", response_model=ApiResponse[Project])
+async def update_project(project_id: str, project_data: ProjectUpdate, user_id: str = Depends(get_current_user_id)):
+    """Update project"""
+    try:
+        project = await project_service.update_project(project_id, project_data, user_id)
+        
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=project,
+            message="Project updated successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "update_project")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
 
-# @router.delete("/{project_id}", response_model=ApiResponse)
-# async def delete_project(project_id: str):
-#     """Delete project - temporarily disabled"""
-#     pass
+@router.delete("/{project_id}", response_model=ApiResponse)
+async def delete_project(project_id: str, user_id: str = Depends(get_current_user_id), hard_delete: bool = False):
+    """Delete project (soft delete by default)"""
+    try:
+        success = await project_service.delete_project(project_id, user_id, hard_delete)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=None,
+            message="Project deleted successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "delete_project")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+@router.post("/{project_id}/restore", response_model=ApiResponse)
+async def restore_project(project_id: str, user_id: str = Depends(get_current_user_id)):
+    """Restore a soft-deleted project"""
+    try:
+        success = await project_service.restore_project(project_id, user_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found or not deleted"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=None,
+            message="Project restored successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "restore_project")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )

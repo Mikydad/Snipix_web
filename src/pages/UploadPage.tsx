@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import { useAppSelector, useAppDispatch } from '../redux/store';
 import { uploadVideo, setFile, clearUpload } from '../redux/slices/uploadSlice';
 import { createProject } from '../redux/slices/projectSlice';
+import { FileMetadata } from '../types';
 
 const UploadContainer = styled.div`
   max-width: 800px;
@@ -156,14 +157,98 @@ const UploadPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { file, progress, isUploading, error } = useAppSelector(state => state.upload);
+  // Ref for actual file object (not serializable for Redux) - using ref to persist across re-renders
+  const actualFileRef = React.useRef<File | null>(null);
+  const [uploadSuccess, setUploadSuccess] = React.useState<boolean>(false);
+  const [localFileMetadata, setLocalFileMetadata] = React.useState<FileMetadata | null>(null);
+  const [projectId, setProjectId] = React.useState<string | null>(null);
+  
+  // Use refs to store state that won't be affected by re-renders
+  const fileMetadataRef = React.useRef<FileMetadata | null>(null);
+  const uploadSuccessRef = React.useRef<boolean>(false);
+  const projectIdRef = React.useRef<string | null>(null);
+
+  // Reset success state when component mounts (in case user navigates back)
+  React.useEffect(() => {
+    console.log('🔄 UploadPage component mounted/remounted');
+    
+    // Try to restore state from localStorage if component was remounted
+    const savedFileMetadata = localStorage.getItem('uploadFileMetadata');
+    const savedUploadSuccess = localStorage.getItem('uploadSuccess');
+    const savedProjectId = localStorage.getItem('uploadProjectId');
+    
+    // Only restore file metadata if upload was not successful
+    if (savedFileMetadata && !localFileMetadata && savedUploadSuccess !== 'true') {
+      console.log('🔄 Restoring file metadata from localStorage');
+      setLocalFileMetadata(JSON.parse(savedFileMetadata));
+      fileMetadataRef.current = JSON.parse(savedFileMetadata);
+    }
+    
+    if (savedUploadSuccess === 'true' && !uploadSuccess) {
+      console.log('🔄 Restoring upload success state from localStorage');
+      setUploadSuccess(true);
+      uploadSuccessRef.current = true;
+    }
+    
+    if (savedProjectId && !projectId) {
+      console.log('🔄 Restoring project ID from localStorage');
+      setProjectId(savedProjectId);
+      projectIdRef.current = savedProjectId;
+    }
+    
+    // Only reset if no saved state exists
+    if (!savedFileMetadata && !savedUploadSuccess && !savedProjectId) {
+      setUploadSuccess(false);
+      setLocalFileMetadata(null);
+      setProjectId(null);
+    }
+  }, []);
+
+  // Debug: Monitor state changes and persist to localStorage
+  React.useEffect(() => {
+    console.log('📊 STATE CHANGE - Local file metadata:', localFileMetadata);
+    console.log('📊 STATE CHANGE - Upload success state:', uploadSuccess);
+    console.log('📊 STATE CHANGE - Is uploading:', isUploading);
+    console.log('📊 STATE CHANGE - Project ID:', projectId);
+    console.log('📊 STATE CHANGE - Actual file:', actualFileRef.current);
+    
+    // Persist state to localStorage
+    if (localFileMetadata) {
+      localStorage.setItem('uploadFileMetadata', JSON.stringify(localFileMetadata));
+    }
+    if (uploadSuccess) {
+      localStorage.setItem('uploadSuccess', 'true');
+      // Clear file metadata from localStorage when upload succeeds
+      localStorage.removeItem('uploadFileMetadata');
+    }
+    if (projectId) {
+      localStorage.setItem('uploadProjectId', projectId);
+    }
+  }, [localFileMetadata, uploadSuccess, isUploading, projectId]);
+
+  // Debug: Monitor Redux state changes
+  React.useEffect(() => {
+    console.log('🔄 REDUX STATE CHANGE - file:', file);
+    console.log('🔄 REDUX STATE CHANGE - progress:', progress);
+    console.log('🔄 REDUX STATE CHANGE - isUploading:', isUploading);
+    console.log('🔄 REDUX STATE CHANGE - error:', error);
+  }, [file, progress, isUploading, error]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
+    console.log('📁 File dropped/selected:', acceptedFiles);
     const file = acceptedFiles[0];
     if (file) {
-      // Validate file type
-      const validTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/mkv'];
+      // Validate file type - use correct browser MIME types
+      const validTypes = [
+        'video/mp4',
+        'video/quicktime',     // MOV
+        'video/x-msvideo',     // AVI
+        'video/x-matroska',    // MKV
+        'video/webm',          // WebM
+        'video/ogg'           // OGG
+      ];
       if (!validTypes.includes(file.type)) {
-        toast.error('Please select a valid video file (MP4, MOV, AVI, MKV)');
+        toast.error('Please select a valid video file (MP4, MOV, AVI, MKV, WebM, OGG)');
         return;
       }
 
@@ -174,7 +259,25 @@ const UploadPage: React.FC = () => {
         return;
       }
 
-      dispatch(setFile(file));
+      // Store the actual file for upload
+      console.log('💾 Setting actualFile to:', file);
+      actualFileRef.current = file;
+      console.log('💾 actualFile set, checking state...');
+      
+      // Convert File to FileMetadata for Redux state
+      const fileMetadata = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified,
+      };
+      
+      // Store locally as well to prevent Redux state issues
+      console.log('💾 Setting local file metadata:', fileMetadata);
+      setLocalFileMetadata(fileMetadata);
+      fileMetadataRef.current = fileMetadata; // Set ref
+      dispatch(setFile(fileMetadata));
+      console.log('💾 All file data set successfully!');
     }
   }, [dispatch]);
 
@@ -184,56 +287,101 @@ const UploadPage: React.FC = () => {
       'video/*': ['.mp4', '.mov', '.avi', '.mkv']
     },
     multiple: false,
-    disabled: isUploading
+    disabled: isUploading || uploadSuccessRef.current
   });
 
   const handleUpload = async () => {
-    if (!file) return;
+    console.log('=== HANDLE UPLOAD FUNCTION STARTED ===');
+    console.log('fileMetadataRef.current:', fileMetadataRef.current);
+    console.log('actualFile:', actualFileRef.current);
+    console.log('uploadSuccessRef.current:', uploadSuccessRef.current);
+    console.log('isUploading:', isUploading);
+    
+    // Explicit guard clauses with clear error messages
+    if (!fileMetadataRef.current) {
+      console.log('❌ No file metadata found');
+      toast.error('No file metadata found. Please select a file again.');
+      return;
+    }
+    
+    if (!actualFileRef.current) {
+      console.log('❌ No file data found');
+      toast.error('No file data found. Please re-select the file.');
+      return;
+    }
 
     try {
-      console.log('Starting upload process...');
+      console.log('✅ Starting upload process...');
       
       // Create a new project first
+      console.log('📝 Creating project with name:', fileMetadataRef.current.name.replace(/\.[^/.]+$/, ''));
       const projectResult = await dispatch(createProject({
-        name: file.name.replace(/\.[^/.]+$/, ''),
+        name: fileMetadataRef.current.name.replace(/\.[^/.]+$/, ''),
         description: `Video uploaded on ${new Date().toLocaleDateString()}`,
       })).unwrap();
 
-      console.log('Project created:', projectResult);
+      console.log('📝 Project created successfully:', projectResult);
+      
+      // Normalize project ID regardless of API response format
+      const newProjectId = projectResult?.data?._id;
 
-      if (projectResult && projectResult.data?._id) {
-        console.log('Project ID:', projectResult.data._id);
+      if (!newProjectId) {
+        console.error('❌ No project ID in response:', projectResult);
+        toast.error('Failed to create project - no project ID returned');
+        return;
+      }
+
+      console.log('✅ Project ID extracted:', newProjectId);
+      setProjectId(newProjectId);
+      projectIdRef.current = newProjectId;
         
-        // Upload the video with the project ID
-        const uploadResult = await dispatch(uploadVideo({ 
-          file, 
-          projectId: projectResult.data._id 
-        })).unwrap();
-        
-        console.log('Upload result:', uploadResult);
-        
-        if (uploadResult) {
-          toast.success('Video uploaded successfully!');
-          dispatch(clearUpload()); // Clear upload state
-          // Wait a moment for state to clear before navigating
-          setTimeout(() => {
-            if (projectResult.data?._id) {
-              navigate(`/transcript/${projectResult.data._id}`);
-            }
-          }, 100);
-        }
-      } else {
-        console.error('No project ID found:', projectResult);
-        toast.error('Failed to create project');
+      // Upload the video with the project ID
+      console.log('📤 Starting video upload...');
+      console.log('📤 Project ID:', newProjectId);
+      console.log('📤 File:', actualFileRef.current);
+      
+      const uploadResult = await dispatch(uploadVideo({ 
+        file: actualFileRef.current, 
+        projectId: newProjectId 
+      })).unwrap();
+      
+      console.log('📤 Upload result:', uploadResult);
+      
+      if (uploadResult) {
+        console.log('Upload successful! Setting uploadSuccess to true');
+        toast.success('Video uploaded successfully!');
+        setUploadSuccess(true); // Mark upload as successful
+        uploadSuccessRef.current = true; // Set ref
+        fileMetadataRef.current = null; // Clear file metadata ref to show success UI
+        console.log('uploadSuccess set to true, fileMetadataRef.current cleared');
+        // Don't navigate automatically - let user stay on page to see success state
       }
     } catch (error) {
-      console.error('Upload error:', error);
-      toast.error('Upload failed. Please try again.');
+      console.error('❌ Upload failed:', error);
+      if (error instanceof Error) {
+        toast.error(`Upload failed: ${error.message}`);
+      } else {
+        toast.error('Upload failed. Please try again.');
+      }
     }
   };
 
   const handleClear = () => {
     dispatch(clearUpload());
+    actualFileRef.current = null;
+    setLocalFileMetadata(null);
+    setProjectId(null);
+    setUploadSuccess(false); // Reset success state
+    
+    // Clear refs
+    fileMetadataRef.current = null;
+    uploadSuccessRef.current = false;
+    projectIdRef.current = null;
+    
+    // Clear localStorage
+    localStorage.removeItem('uploadFileMetadata');
+    localStorage.removeItem('uploadSuccess');
+    localStorage.removeItem('uploadProjectId');
   };
 
   const formatFileSize = (bytes: number) => {
@@ -244,12 +392,14 @@ const UploadPage: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  console.log('🎨 RENDERING UploadPage - localFileMetadata:', localFileMetadata, 'uploadSuccess:', uploadSuccess);
+
   return (
     <UploadContainer>
       <UploadCard {...getRootProps()} className={isDragActive ? 'drag-active' : ''}>
         <input {...getInputProps()} />
         
-        {!file ? (
+        {!fileMetadataRef.current && !uploadSuccessRef.current ? (
           <>
             <UploadIcon>📁</UploadIcon>
             <UploadTitle>Upload Your Video</UploadTitle>
@@ -257,14 +407,47 @@ const UploadPage: React.FC = () => {
               Drag and drop your video file here, or click to browse
             </UploadDescription>
           </>
+        ) : uploadSuccessRef.current ? (
+          <>
+            <UploadIcon>🎉</UploadIcon>
+            <UploadTitle>Upload Successful!</UploadTitle>
+            <UploadDescription>
+              Your video has been uploaded successfully. Click below to go to the transcript page.
+            </UploadDescription>
+            <ProgressContainer>
+              <ProgressBar $progress={100} />
+              <ProgressText>Complete!</ProgressText>
+            </ProgressContainer>
+            <ActionButtons>
+              <Button 
+                $primary 
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent event bubbling to dropzone
+                  // Navigate to transcript page
+                  if (projectIdRef.current) {
+                    navigate(`/transcript/${projectIdRef.current}`);
+                  } else {
+                    toast.error('Project ID not found');
+                  }
+                }}
+              >
+                Go to Transcript
+              </Button>
+              <Button onClick={(e) => { e.stopPropagation(); handleClear(); }}>
+                Upload Another Video
+              </Button>
+            </ActionButtons>
+          </>
         ) : (
           <>
             <UploadIcon>✅</UploadIcon>
             <UploadTitle>File Selected</UploadTitle>
-            <FileInfo>
-              <FileName>{file.name}</FileName>
-              <FileSize>{formatFileSize(file.size)}</FileSize>
-            </FileInfo>
+            {fileMetadataRef.current && (
+              <FileInfo>
+                <FileName>{fileMetadataRef.current.name}</FileName>
+                <FileSize>{formatFileSize(fileMetadataRef.current.size)}</FileSize>
+              </FileInfo>
+            )}
             
             {isUploading && (
               <ProgressContainer>
@@ -276,12 +459,18 @@ const UploadPage: React.FC = () => {
             <ActionButtons>
               <Button 
                 $primary 
-                onClick={handleUpload}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent event bubbling to dropzone
+                  console.log('🔘 Start Upload button clicked!');
+                  console.log('🔘 About to call handleUpload...');
+                  handleUpload();
+                  console.log('🔘 handleUpload called!');
+                }}
                 disabled={isUploading}
               >
                 {isUploading ? 'Uploading...' : 'Start Upload'}
               </Button>
-              <Button onClick={handleClear} disabled={isUploading}>
+              <Button onClick={(e) => { e.stopPropagation(); handleClear(); }} disabled={isUploading}>
                 Clear
               </Button>
             </ActionButtons>

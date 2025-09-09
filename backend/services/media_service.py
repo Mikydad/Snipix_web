@@ -254,7 +254,9 @@ class MediaService:
                 concat_file = os.path.join(self.processed_dir, "concat_list.txt")
                 with open(concat_file, 'w') as f:
                     for temp_file in temp_files:
-                        f.write(f"file '{temp_file}'\n")
+                        # Use absolute path to avoid path resolution issues
+                        abs_path = os.path.abspath(temp_file)
+                        f.write(f"file '{abs_path}'\n")
                 
                 # Concatenate segments
                 ffmpeg.input(concat_file, format='concat', safe=0).output(

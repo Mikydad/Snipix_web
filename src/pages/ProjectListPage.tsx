@@ -229,7 +229,7 @@ const ProjectListPage: React.FC = () => {
             <ProjectCard key={project._id}>
               <ProjectThumbnail>
                 {project.thumbnail ? (
-                  <img src={project.thumbnail} alt={project.name} />
+                  <img src={`/media/${project._id}/thumbnail`} alt={project.name} />
                 ) : (
                   '🎬'
                 )}

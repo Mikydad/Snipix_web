@@ -10,6 +10,7 @@ import TimelineEditor from '../components/TimelineEditor';
 import VideoPreview from '../components/VideoPreview';
 import TimelineToolbar from '../components/TimelineToolbar';
 import ErrorToast from '../components/ErrorToast';
+import HeaderProgress from '../components/HeaderProgress';
 import { toast } from 'react-toastify';
 import { useAutoTrim } from '../hooks/useAutoTrim';
 import { getEffectiveTimelineDuration } from '../utils/videoTimeUtils';
@@ -135,7 +136,7 @@ const TimelinePage: React.FC = () => {
     (state: RootState) => state.projects
   );
   
-  const { layers, playheadTime, zoom, duration, isPlaying } = useSelector(
+  const { layers, playheadTime, zoom, duration, isPlaying, validationState } = useSelector(
     (state: RootState) => state.timeline
   );
 
@@ -230,18 +231,10 @@ const TimelinePage: React.FC = () => {
         const newTime = playheadTimeRef.current + 0.1; // Use ref to get current time
         const effectiveDuration = getEffectiveTimelineDuration(layers);
         
-        console.log('DEBUG: Auto-advance', {
-          currentTime: playheadTimeRef.current,
-          newTime,
-          effectiveDuration,
-          shouldStop: newTime > effectiveDuration
-        });
-        
         if (newTime < effectiveDuration) {
           dispatch(setPlayheadTime(newTime));
         } else {
           // Stop playing and clamp playhead to exact end
-          console.log('DEBUG: Stopping at timeline end');
           dispatch(setPlayheadTime(effectiveDuration));
           dispatch(setIsPlaying(false));
         }
@@ -286,7 +279,11 @@ const TimelinePage: React.FC = () => {
       <ErrorToast />
       <Header>
         <Title>{currentProject.name} - Timeline Editor</Title>
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <HeaderProgress 
+            isVisible={validationState.isValidating} 
+            message="Processing video..." 
+          />
           <PlayPauseButton onClick={handlePlayPause}>
             {isPlaying ? '⏸️ Pause' : '▶️ Play'}
           </PlayPauseButton>

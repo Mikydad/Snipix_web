@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Header
 from fastapi.responses import FileResponse
-from typing import List
+from typing import List, Optional
 import os
 from datetime import datetime
 
@@ -9,16 +9,25 @@ from models.schemas import (
     RemoveFillersResponse, ApiResponse, TrimVideoRequest, TrimVideoResponse
 )
 from services.media_service import media_service
-from services.database import get_projects_collection
-from api.auth import get_current_user
-from models.schemas import User
+from services.project_service import project_service
+from utils.error_handlers import handle_database_error, get_user_friendly_message
 
 router = APIRouter()
+
+# Dependency to get user ID from headers (in a real app, this would be from JWT token)
+async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> str:
+    """Get current user ID from headers"""
+    if not x_user_id:
+        # For testing purposes, use a default user ID
+        # Generate a consistent default user ID
+        return "507f1f77bcf86cd799439011"  # Default test user ID
+    return x_user_id
 
 @router.post("/upload", response_model=ApiResponse[UploadResponse])
 async def upload_media(
     file: UploadFile = File(...),
-    project_id: str = Form(...)
+    project_id: str = Form(...),
+    user_id: str = Depends(get_current_user_id)
 ):
     """Upload video file"""
     try:
@@ -51,15 +60,37 @@ async def upload_media(
         except Exception as e:
             thumbnail_path = None
         
-        # Update project with video information
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        if project_doc:
-            project_doc["video_path"] = file_path
-            project_doc["duration"] = duration
-            project_doc["thumbnail"] = thumbnail_path
-            project_doc["updated_at"] = datetime.utcnow()
+        # Update project with video information using project service
+        try:
+            # Get the project first to verify it exists and user has access
+            project = await project_service.get_project(project_id, user_id)
+            if not project:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Project not found or access denied"
+                )
+            
+            # Update project with video information
+            from models.schemas import ProjectUpdate
+            update_data = ProjectUpdate(
+                video_path=file_path,
+                duration=duration,
+                thumbnail=thumbnail_path
+            )
+            
+            updated_project = await project_service.update_project(project_id, update_data, user_id)
             print(f"DEBUG: Updated project duration to: {duration} (type: {type(duration)})")
+            
+        except Exception as e:
+            # If project update fails, clean up the uploaded file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            if thumbnail_path and os.path.exists(thumbnail_path):
+                os.remove(thumbnail_path)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update project: {str(e)}"
+            )
         
         return ApiResponse(
             success=True,
@@ -80,21 +111,22 @@ async def upload_media(
         )
 
 @router.post("/transcribe", response_model=ApiResponse[TranscribeResponse])
-async def transcribe_audio(project_id: str = Form(...)):
+async def transcribe_audio(
+    project_id: str = Form(...),
+    user_id: str = Depends(get_current_user_id)
+):
     """Transcribe video audio"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        
-        if not project_doc:
+        # Get project from database
+        project = await project_service.get_project(project_id, user_id)
+        if not project:
             raise HTTPException(
                 status_code=404,
-                detail="Project not found"
+                detail="Project not found or access denied"
             )
         
         # Get video file path
-        video_path = project_doc.get("video_path")
+        video_path = project.video_path
         if not video_path or not os.path.exists(video_path):
             raise HTTPException(
                 status_code=404,
@@ -115,7 +147,7 @@ async def transcribe_audio(project_id: str = Form(...)):
                 success=True,
                 data=TranscribeResponse(
                     transcript=transcript,
-                    duration=project_doc.get("duration", 0)
+                    duration=project.duration or 0
                 ),
                 message="Transcription completed successfully"
             )
@@ -134,21 +166,19 @@ async def transcribe_audio(project_id: str = Form(...)):
         )
 
 @router.post("/remove-fillers", response_model=ApiResponse[RemoveFillersResponse])
-async def remove_fillers(request: RemoveFillersRequest):
+async def remove_fillers(request: RemoveFillersRequest, user_id: str = Depends(get_current_user_id)):
     """Remove filler words from video"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == request.project_id), None)
-        
-        if not project_doc:
+        # Get project from database
+        project = await project_service.get_project(request.project_id, user_id)
+        if not project:
             raise HTTPException(
                 status_code=404,
-                detail="Project not found"
+                detail="Project not found or access denied"
             )
         
         # Get video file path
-        video_path = project_doc.get("video_path")
+        video_path = project.video_path
         if not video_path or not os.path.exists(video_path):
             raise HTTPException(
                 status_code=404,
@@ -178,21 +208,22 @@ async def remove_fillers(request: RemoveFillersRequest):
         )
 
 @router.get("/{project_id}/video")
-async def get_video(project_id: str):
+async def get_video(
+    project_id: str,
+    user_id: str = Depends(get_current_user_id)
+):
     """Get video file"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        
-        if not project_doc:
+        # Get project from database
+        project = await project_service.get_project(project_id, user_id)
+        if not project:
             raise HTTPException(
                 status_code=404,
-                detail="Project not found"
+                detail="Project not found or access denied"
             )
         
         # Get video file path
-        video_path = project_doc.get("video_path")
+        video_path = project.video_path
         if not video_path or not os.path.exists(video_path):
             raise HTTPException(
                 status_code=404,
@@ -214,21 +245,22 @@ async def get_video(project_id: str):
         )
 
 @router.get("/{project_id}/thumbnail")
-async def get_thumbnail(project_id: str):
+async def get_thumbnail(
+    project_id: str,
+    user_id: str = Depends(get_current_user_id)
+):
     """Get video thumbnail"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        
-        if not project_doc:
+        # Get project from database
+        project = await project_service.get_project(project_id, user_id)
+        if not project:
             raise HTTPException(
                 status_code=404,
-                detail="Project not found"
+                detail="Project not found or access denied"
             )
         
         # Get thumbnail path
-        thumbnail_path = project_doc.get("thumbnail")
+        thumbnail_path = project.thumbnail
         if not thumbnail_path or not os.path.exists(thumbnail_path):
             raise HTTPException(
                 status_code=404,
@@ -250,21 +282,19 @@ async def get_thumbnail(project_id: str):
         )
 
 @router.post("/trim-video", response_model=ApiResponse[TrimVideoResponse])
-async def trim_video(request: TrimVideoRequest):
+async def trim_video(request: TrimVideoRequest, user_id: str = Depends(get_current_user_id)):
     """Trim video based on timeline segments (hybrid approach)"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == request.project_id), None)
-        
-        if not project_doc:
+        # Get project from database
+        project = await project_service.get_project(request.project_id, user_id)
+        if not project:
             raise HTTPException(
                 status_code=404,
-                detail="Project not found"
+                detail="Project not found or access denied"
             )
         
         # Get video file path
-        video_path = project_doc.get("video_path")
+        video_path = project.video_path
         if not video_path or not os.path.exists(video_path):
             raise HTTPException(
                 status_code=404,
@@ -286,10 +316,14 @@ async def trim_video(request: TrimVideoRequest):
         # Get new duration
         new_duration = media_service.get_video_duration(trimmed_path)
         
-        # Update project with trimmed video
-        project_doc["trimmed_video_path"] = trimmed_path
-        project_doc["trimmed_duration"] = new_duration
-        project_doc["updated_at"] = datetime.utcnow()
+        # Update project with trimmed video using project service
+        from models.schemas import ProjectUpdate
+        update_data = ProjectUpdate(
+            trimmed_video_path=trimmed_path,
+            trimmed_duration=new_duration
+        )
+        
+        await project_service.update_project(request.project_id, update_data, user_id)
         
         return ApiResponse(
             success=True,

@@ -1,173 +1,228 @@
-from fastapi import APIRouter, HTTPException, status
-from typing import Dict, Any
+"""
+Timeline API endpoints for MongoDB Integration
+"""
+from fastapi import APIRouter, HTTPException, status, Depends, Header
+from typing import List, Optional
 
 from models.schemas import (
-    TimelineSaveRequest, TimelineLoadResponse, ApiResponse
+    TimelineStateDocument, TimelineStateCreate, TimelineStateUpdate, 
+    ApiResponse
 )
+from services.timeline_service import timeline_service
+from utils.error_handlers import handle_database_error, get_user_friendly_message
 
 router = APIRouter()
 
-@router.post("/save", response_model=ApiResponse)
-async def save_timeline(request: TimelineSaveRequest):
-    """Save timeline state"""
-    try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == request.project_id), None)
-        
-        if not project_doc:
-            raise HTTPException(
-                status_code=404,
-                detail="Project not found"
-            )
-        
-        # For now, just return success since we're not storing timeline data
-        return ApiResponse(
-            success=True,
-            message="Timeline saved successfully"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to save timeline"
-        )
+# Dependency to get user ID from headers (in a real app, this would be from JWT token)
+async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> str:
+    """Get current user ID from headers"""
+    if not x_user_id:
+        # For testing purposes, use a default user ID
+        return "507f1f77bcf86cd799439011"  # Default test user ID
+    return x_user_id
 
-@router.get("/{project_id}", response_model=ApiResponse[TimelineLoadResponse])
-async def load_timeline(project_id: str):
-    """Load timeline state"""
-    try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        
-        if not project_doc:
-            raise HTTPException(
-                status_code=404,
-                detail="Project not found"
-            )
-        
-        # For now, return empty timeline state since we're not storing timeline data
-        from models.schemas import TimelineState
-        empty_timeline = TimelineState()
-        
-        return ApiResponse(
-            success=True,
-            data=TimelineLoadResponse(timeline_state=empty_timeline),
-            message="Timeline loaded successfully"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to load timeline"
-        )
 
-@router.delete("/{project_id}", response_model=ApiResponse)
-async def delete_timeline(project_id: str):
-    """Delete timeline state"""
-    try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
-        
-        if not project_doc:
-            raise HTTPException(
-                status_code=404,
-                detail="Project not found"
-            )
-        
-        # For now, just return success since we're not storing timeline data
-        return ApiResponse(
-            success=True,
-            message="Timeline deleted successfully"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete timeline"
-        )
-
-@router.post("/{project_id}/render-preview", response_model=ApiResponse)
-async def render_preview(
-    project_id: str,
-    start_time: float = 0.0,
-    end_time: float = 10.0,
-    quality: str = "medium"
+@router.post("/", response_model=ApiResponse[TimelineStateDocument])
+async def save_timeline_state(
+    timeline_data: TimelineStateCreate, 
+    user_id: str = Depends(get_current_user_id)
 ):
-    """Render preview of timeline segment"""
+    """Save a new timeline state"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
+        timeline_state = await timeline_service.save_timeline_state(timeline_data, user_id)
         
-        if not project_doc:
-            raise HTTPException(
-                status_code=404,
-                detail="Project not found"
-            )
-        
-        # Get video file path
-        video_path = project_doc.get("video_path")
-        if not video_path:
-            raise HTTPException(
-                status_code=404,
-                detail="Video file not found"
-            )
-        
-        # For now, return success since we're not implementing preview rendering yet
         return ApiResponse(
             success=True,
-            message="Preview rendering feature is available (backend processing to be implemented)"
+            data=timeline_state,
+            message="Timeline state saved successfully"
         )
         
-    except HTTPException:
-        raise
     except Exception as e:
+        error = handle_database_error(e, "save_timeline_state")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to render preview"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
         )
 
-@router.post("/{project_id}/export", response_model=ApiResponse)
-async def export_timeline(project_id: str):
-    """Export timeline as video"""
+
+@router.get("/{project_id}/current", response_model=ApiResponse[TimelineStateDocument])
+async def get_current_timeline_state(
+    project_id: str, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """Get the current timeline state for a project"""
     try:
-        # Find project in memory
-        from api.projects import projects_storage
-        project_doc = next((p for p in projects_storage if p["_id"] == project_id), None)
+        timeline_state = await timeline_service.get_current_timeline_state(project_id, user_id)
         
-        if not project_doc:
+        if not timeline_state:
             raise HTTPException(
-                status_code=404,
-                detail="Project not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No timeline state found for this project"
             )
         
-        # Get video file path
-        video_path = project_doc.get("video_path")
-        if not video_path:
-            raise HTTPException(
-                status_code=404,
-                detail="Video file not found"
-            )
-        
-        # For now, return success since we're not implementing export yet
         return ApiResponse(
             success=True,
-            message="Export feature is available (backend processing to be implemented)"
+            data=timeline_state,
+            message="Current timeline state retrieved successfully"
         )
         
     except HTTPException:
         raise
     except Exception as e:
+        error = handle_database_error(e, "get_current_timeline_state")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to export timeline"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+
+@router.get("/{project_id}/version/{version}", response_model=ApiResponse[TimelineStateDocument])
+async def get_timeline_state_by_version(
+    project_id: str, 
+    version: int, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """Get a specific timeline state by version"""
+    try:
+        timeline_state = await timeline_service.get_timeline_state_by_version(project_id, version, user_id)
+        
+        if not timeline_state:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Timeline state version {version} not found"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=timeline_state,
+            message=f"Timeline state version {version} retrieved successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "get_timeline_state_by_version")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+
+@router.get("/{project_id}/history", response_model=ApiResponse[List[TimelineStateDocument]])
+async def get_timeline_history(
+    project_id: str, 
+    user_id: str = Depends(get_current_user_id),
+    limit: int = 20,
+    skip: int = 0
+):
+    """Get timeline state history for a project"""
+    try:
+        history = await timeline_service.get_timeline_history(project_id, user_id, limit, skip)
+        
+        return ApiResponse(
+            success=True,
+            data=history,
+            message=f"Retrieved {len(history)} timeline states from history"
+        )
+        
+    except Exception as e:
+        error = handle_database_error(e, "get_timeline_history")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+
+@router.put("/{timeline_id}", response_model=ApiResponse[TimelineStateDocument])
+async def update_timeline_state(
+    timeline_id: str, 
+    timeline_data: TimelineStateUpdate, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """Update a timeline state"""
+    try:
+        timeline_state = await timeline_service.update_timeline_state(timeline_id, timeline_data, user_id)
+        
+        if not timeline_state:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timeline state not found"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=timeline_state,
+            message="Timeline state updated successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "update_timeline_state")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+
+@router.post("/{project_id}/restore/{version}", response_model=ApiResponse[TimelineStateDocument])
+async def restore_timeline_state(
+    project_id: str, 
+    version: int, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """Restore a timeline state to current"""
+    try:
+        timeline_state = await timeline_service.restore_timeline_state(project_id, version, user_id)
+        
+        if not timeline_state:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Timeline state version {version} not found"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=timeline_state,
+            message=f"Timeline state version {version} restored successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "restore_timeline_state")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
+        )
+
+
+@router.delete("/{timeline_id}", response_model=ApiResponse)
+async def delete_timeline_state(
+    timeline_id: str, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """Delete a timeline state"""
+    try:
+        success = await timeline_service.delete_timeline_state(timeline_id, user_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timeline state not found"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=None,
+            message="Timeline state deleted successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error = handle_database_error(e, "delete_timeline_state")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=get_user_friendly_message(e)
         )

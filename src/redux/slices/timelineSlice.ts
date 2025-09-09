@@ -759,27 +759,31 @@ const timelineSlice = createSlice({
     // Hybrid trim video
     builder
       .addCase(trimVideoHybrid.pending, (state) => {
-        // Could add loading state here
+        state.validationState.isValidating = true;
       })
       .addCase(trimVideoHybrid.fulfilled, (state, action) => {
+        state.validationState.isValidating = false;
         // Update state with trimmed video info
         console.log('Video trimmed successfully:', action.payload);
       })
       .addCase(trimVideoHybrid.rejected, (state, action) => {
+        state.validationState.isValidating = false;
         console.error('Failed to trim video:', action.payload);
       });
 
     // Auto trim video
     builder
       .addCase(autoTrimVideo.pending, (state) => {
-        // Could add loading state here
+        state.validationState.isValidating = true;
       })
       .addCase(autoTrimVideo.fulfilled, (state, action) => {
+        state.validationState.isValidating = false;
         if (action.payload) {
           console.log('Auto trim completed successfully:', action.payload);
         }
       })
       .addCase(autoTrimVideo.rejected, (state, action) => {
+        state.validationState.isValidating = false;
         console.error('Failed to auto-trim video:', action.payload);
       });
   },

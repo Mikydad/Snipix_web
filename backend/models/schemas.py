@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Dict, Any, Generic, TypeVar
+from pydantic import BaseModel, Field, EmailStr, validator
+from typing import List, Optional, Dict, Any, Generic, TypeVar, Union
 from datetime import datetime
 from enum import Enum
+from bson import ObjectId
+import uuid
 
 # Generic type for API responses
 T = TypeVar('T')
@@ -25,24 +27,75 @@ class LayerType(str, Enum):
 class BaseSchema(BaseModel):
     class Config:
         json_encoders = {
-            datetime: lambda v: v.isoformat()
+            datetime: lambda v: v.isoformat(),
+            ObjectId: lambda v: str(v)
         }
+        validate_by_name = True
+        use_enum_values = True
+
+class MongoDBBaseSchema(BaseSchema):
+    """Base schema for MongoDB documents with ObjectId support"""
+    id: Optional[str] = Field(alias="_id", default_factory=lambda: str(ObjectId()))
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    
+    @validator('id', pre=True, always=True)
+    def validate_id(cls, v):
+        if v is None:
+            return str(ObjectId())
+        return str(v) if isinstance(v, ObjectId) else v
+    
+    def dict(self, **kwargs):
+        """Override dict to handle MongoDB-specific fields"""
+        data = super().dict(**kwargs)
+        if '_id' in data and 'id' in data:
+            data['_id'] = data.pop('id')
+        return data
+
+class SoftDeleteSchema(MongoDBBaseSchema):
+    """Schema with soft delete functionality"""
+    is_deleted: bool = Field(default=False)
+    deleted_at: Optional[datetime] = None
+    
+    def soft_delete(self):
+        """Mark document as deleted"""
+        self.is_deleted = True
+        self.deleted_at = datetime.now()
+        self.updated_at = datetime.now()
+
+class VersionedSchema(MongoDBBaseSchema):
+    """Schema with versioning support"""
+    version: int = Field(default=1)
+    previous_version_id: Optional[str] = None
+    
+    def increment_version(self, previous_version_id: Optional[str] = None):
+        """Increment version number"""
+        self.previous_version_id = previous_version_id
+        self.version += 1
+        self.updated_at = datetime.now()
 
 # User models
 class UserBase(BaseSchema):
     email: EmailStr
     name: str
+    username: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
 
-class User(UserBase):
-    id: str = Field(alias="_id")
-    created_at: datetime
-    updated_at: datetime
+class UserUpdate(BaseSchema):
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
 
-    class Config:
-        allow_population_by_field_name = True
+class User(MongoDBBaseSchema):
+    email: EmailStr
+    name: str
+    username: Optional[str] = None
+    is_active: bool = Field(default=True)
+    is_verified: bool = Field(default=False)
+    last_login: Optional[datetime] = None
+    preferences: Dict[str, Any] = Field(default_factory=dict)
 
 class UserLogin(BaseSchema):
     email: EmailStr
@@ -66,19 +119,22 @@ class ProjectUpdate(BaseSchema):
     description: Optional[str] = None
     thumbnail: Optional[str] = None
     duration: Optional[float] = None
+    video_path: Optional[str] = None
+    trimmed_video_path: Optional[str] = None
+    trimmed_duration: Optional[float] = None
 
-class Project(ProjectBase):
-    id: str = Field(alias="_id")
+class Project(SoftDeleteSchema):
+    name: str
+    description: Optional[str] = None
     user_id: str
-    created_at: datetime
-    updated_at: datetime
     thumbnail: Optional[str] = None
     duration: Optional[float] = None
-    timeline_state: Optional[Dict[str, Any]] = None
-    transcript_state: Optional[Dict[str, Any]] = None
-
-    class Config:
-        allow_population_by_field_name = True
+    video_path: Optional[str] = None
+    status: str = Field(default="active")  # active, archived, processing
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
+    collaborators: List[str] = Field(default_factory=list)  # user_ids
+    permissions: Dict[str, List[str]] = Field(default_factory=dict)  # user_id -> permissions
 
 # Clip models
 class ClipProperties(BaseSchema):
@@ -133,6 +189,26 @@ class TimelineState(BaseSchema):
     is_playing: bool = False
     is_snapping: bool = True
 
+# MongoDB Timeline State models
+class TimelineStateDocument(VersionedSchema):
+    project_id: str
+    timeline_state: TimelineState
+    is_current: bool = Field(default=True)
+    description: Optional[str] = None
+    created_by: str  # user_id
+    change_summary: Optional[str] = None
+
+class TimelineStateCreate(BaseSchema):
+    project_id: str
+    timeline_state: TimelineState
+    description: Optional[str] = None
+    change_summary: Optional[str] = None
+
+class TimelineStateUpdate(BaseSchema):
+    timeline_state: Optional[TimelineState] = None
+    description: Optional[str] = None
+    change_summary: Optional[str] = None
+
 # Transcript models
 class TranscriptWord(BaseSchema):
     text: str
@@ -140,10 +216,45 @@ class TranscriptWord(BaseSchema):
     end: float
     confidence: float
     is_filler: Optional[bool] = False
+    speaker_id: Optional[str] = None
+
+class TranscriptSegment(BaseSchema):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    start_time: float
+    end_time: float
+    text: str
+    words: List[TranscriptWord] = Field(default_factory=list)
+    speaker_id: Optional[str] = None
+    confidence: float
+    is_edited: bool = Field(default=False)
+    edited_text: Optional[str] = None
 
 class TranscriptState(BaseSchema):
     words: List[TranscriptWord] = Field(default_factory=list)
     selected_words: List[str] = Field(default_factory=list)
+
+# MongoDB Transcription models
+class TranscriptionDocument(MongoDBBaseSchema):
+    project_id: str
+    segments: List[TranscriptSegment] = Field(default_factory=list)
+    language: str = Field(default="en")
+    model_used: Optional[str] = None
+    processing_time: Optional[float] = None
+    confidence_score: Optional[float] = None
+    is_complete: bool = Field(default=False)
+    is_edited: bool = Field(default=False)
+    speaker_count: int = Field(default=1)
+    speakers: Dict[str, str] = Field(default_factory=dict)  # speaker_id -> speaker_name
+
+class TranscriptionCreate(BaseSchema):
+    project_id: str
+    language: Optional[str] = "en"
+    model_used: Optional[str] = None
+
+class TranscriptionUpdate(BaseSchema):
+    segments: Optional[List[TranscriptSegment]] = None
+    is_edited: Optional[bool] = None
+    speakers: Optional[Dict[str, str]] = None
 
 # Media models
 class UploadResponse(BaseSchema):
@@ -204,3 +315,64 @@ class TrimVideoRequest(BaseSchema):
 class TrimVideoResponse(BaseSchema):
     trimmed_video_path: str
     new_duration: float
+
+# User Session models
+class UserSession(MongoDBBaseSchema):
+    user_id: str
+    project_id: Optional[str] = None
+    session_data: Dict[str, Any] = Field(default_factory=dict)
+    last_accessed: datetime = Field(default_factory=datetime.now)
+    is_active: bool = Field(default=True)
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+class UserSessionCreate(BaseSchema):
+    user_id: str
+    project_id: Optional[str] = None
+    session_data: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+class UserSessionUpdate(BaseSchema):
+    session_data: Optional[Dict[str, Any]] = None
+    last_accessed: Optional[datetime] = None
+    is_active: Optional[bool] = None
+
+# Audit Log models
+class AuditLogAction(str, Enum):
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    SOFT_DELETE = "soft_delete"
+    RESTORE = "restore"
+    VIEW = "view"
+    EXPORT = "export"
+    SHARE = "share"
+    UPLOAD = "upload"
+    PROCESS = "process"
+
+class AuditLog(MongoDBBaseSchema):
+    user_id: str
+    project_id: Optional[str] = None
+    action: AuditLogAction
+    resource_type: str  # project, timeline_state, transcription, etc.
+    resource_id: Optional[str] = None
+    details: Dict[str, Any] = Field(default_factory=dict)
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    success: bool = Field(default=True)
+    error_message: Optional[str] = None
+
+class AuditLogCreate(BaseSchema):
+    user_id: str
+    project_id: Optional[str] = None
+    action: AuditLogAction
+    resource_type: str
+    resource_id: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    success: Optional[bool] = True
+    error_message: Optional[str] = None
