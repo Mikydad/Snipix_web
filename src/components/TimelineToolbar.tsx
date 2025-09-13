@@ -1,5 +1,5 @@
-import React from 'react';
-import styled from 'styled-components';
+import React, { useState } from 'react';
+import styled, { keyframes, css } from 'styled-components';
 import { useAppSelector, useAppDispatch } from '../redux/store';
 import { 
   setIsPlaying, 
@@ -10,9 +10,14 @@ import {
   setIsSnapping,
   applyTrimOperations,
   splitLayerAtPlayhead,
-  deleteClipById
+  deleteClipById,
+  saveCheckpoint,
+  clearCheckpoints
 } from '../redux/slices/timelineSlice';
 import { getEffectiveTimelineDuration } from '../utils/videoTimeUtils';
+import { useTimelineHistory } from '../hooks/useUndoRedo';
+import RecoveryDialog from './RecoveryDialog';
+import HistoryPanel from './HistoryPanel';
 
 const ToolbarContainer = styled.div`
   display: flex;
@@ -85,9 +90,49 @@ const ToolbarLabel = styled.span`
   font-weight: 500;
 `;
 
+const DropdownMenu = styled.div<{ $isOpen: boolean }>`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: 4px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 200px;
+  display: ${({ $isOpen }) => $isOpen ? 'block' : 'none'};
+`;
+
+const DropdownItem = styled.button`
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s ease;
+  
+  &:hover {
+    background: ${({ theme }) => theme.colors.surfaceHover};
+  }
+  
+  &:first-child {
+    border-radius: 4px 4px 0 0;
+  }
+  
+  &:last-child {
+    border-radius: 0 0 4px 4px;
+  }
+`;
+
+const RelativeContainer = styled.div`
+  position: relative;
+`;
+
 const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const dispatch = useAppDispatch();
-    const {
+  const {
     isPlaying,
     playheadTime, 
     duration, 
@@ -97,8 +142,45 @@ const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
     selectedLayer,
     selectedClips,
     layers,
-    trimState
+    trimState,
+    checkpoints,
+    lastSavedCheckpoint,
+    hasUnsavedChanges,
+    actionHistory
   } = useAppSelector(state => state.timeline);
+
+  // Use the enhanced timeline history hook
+  const timelineHistory = useTimelineHistory(projectId || 'default');
+  
+  // Local state for UI
+  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+
+  // Mock recovery data for now
+  const recoveryData = hasUnsavedChanges ? {
+    timelineState: {
+      layers,
+      playheadTime,
+      duration,
+      zoom: 1,
+      markers: [],
+      undoStack,
+      redoStack,
+      actionHistory,
+      checkpoints,
+      lastSavedCheckpoint,
+      hasUnsavedChanges,
+      maxHistorySize: 100,
+      selectedClips,
+      isPlaying,
+      isSnapping,
+      selectedLayer,
+      trimState,
+      validationState: { errors: [], warnings: [], isValidating: false }
+    },
+    actionHistory,
+    checkpoints
+  } : null;
 
   const handlePlayPause = () => {
     const effectiveDuration = getEffectiveTimelineDuration(layers);
@@ -136,7 +218,7 @@ const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
       isMuted: false,
       order: 0
     };
-    dispatch(addLayer(newLayer));
+    dispatch(addLayer({ ...newLayer, skipUndo: false }));
   };
 
   const handleUndo = () => {
@@ -192,6 +274,39 @@ const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const handleApplyChanges = () => {
     if (selectedLayer) {
       dispatch(applyTrimOperations({ layerId: selectedLayer }));
+    }
+  };
+
+  const handleRestoreFromCheckpoint = (checkpointId: string) => {
+    timelineHistory.restoreCheckpoint(checkpointId);
+  };
+
+  const handleDiscardChanges = () => {
+    // Use a proper confirmation dialog instead of browser confirm
+    if (window.confirm('Are you sure you want to discard all unsaved changes?')) {
+      // Restore to last saved checkpoint
+      if (lastSavedCheckpoint) {
+        timelineHistory.restoreCheckpoint(lastSavedCheckpoint);
+      }
+    }
+  };
+
+  const handleContinueEditing = () => {
+    setShowRecoveryDialog(false);
+  };
+
+  const handleShowHistory = () => {
+    setShowHistoryPanel(true);
+  };
+
+  const handleRestoreToAction = (actionId: string) => {
+    // This would need to be implemented in the timeline slice
+    console.log('Restore to action:', actionId);
+  };
+
+  const handleClearHistory = () => {
+    if (window.confirm('Are you sure you want to clear all action history?')) {
+      timelineHistory.clearActionHistory();
     }
   };
 
@@ -283,16 +398,22 @@ const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
         <ToolbarButton 
           onClick={handleUndo} 
           disabled={undoStack.length === 0}
-          title="Undo"
+          title={`Undo (${undoStack.length} available)`}
         >
           ↩️
         </ToolbarButton>
         <ToolbarButton 
           onClick={handleRedo} 
           disabled={redoStack.length === 0}
-          title="Redo"
+          title={`Redo (${redoStack.length} available)`}
         >
           ↪️
+        </ToolbarButton>
+        <ToolbarButton 
+          onClick={handleShowHistory}
+          title="Show Action History"
+        >
+          📋
         </ToolbarButton>
       </ToolbarGroup>
 
@@ -306,6 +427,29 @@ const TimelineToolbar: React.FC<{ projectId?: string }> = ({ projectId }) => {
           🔗
         </ToolbarButton>
       </ToolbarGroup>
+
+      {/* Dialogs */}
+      <RecoveryDialog
+        isVisible={showRecoveryDialog}
+        onClose={() => setShowRecoveryDialog(false)}
+        projectId={projectId || ''}
+        recoveryData={recoveryData}
+        onRecoveryComplete={(action) => {
+          if (action === 'restore') {
+            handleRestoreFromCheckpoint(checkpoints[0]?.id || '');
+          } else if (action === 'discard') {
+            handleDiscardChanges();
+          } else if (action === 'continue') {
+            handleContinueEditing();
+          }
+        }}
+      />
+
+      <HistoryPanel
+        isVisible={showHistoryPanel}
+        onClose={() => setShowHistoryPanel(false)}
+        projectId={projectId || ''}
+      />
     </ToolbarContainer>
   );
 };

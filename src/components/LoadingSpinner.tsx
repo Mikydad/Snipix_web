@@ -2,7 +2,7 @@
  * Loading Spinner Component
  */
 import React from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 
 const spin = keyframes`
   0% { transform: rotate(0deg); }
@@ -23,7 +23,7 @@ const Spinner = styled.div`
   border: 4px solid #f3f3f3;
   border-top: 4px solid #3b82f6;
   border-radius: 50%;
-  animation: ${spin} 1s linear infinite;
+  /* animation: ${css`${spin} 1s linear infinite`}; */
 `;
 
 const LoadingText = styled.p`
@@ -39,7 +39,7 @@ const SmallSpinner = styled.div`
   border: 4px solid #f3f3f3;
   border-top: 4px solid #3b82f6;
   border-radius: 50%;
-  animation: ${spin} 1s linear infinite;
+  /* animation: ${css`${spin} 1s linear infinite`}; */
 `;
 
 const MediumSpinner = styled.div`
@@ -48,7 +48,7 @@ const MediumSpinner = styled.div`
   border: 4px solid #f3f3f3;
   border-top: 4px solid #3b82f6;
   border-radius: 50%;
-  animation: ${spin} 1s linear infinite;
+  /* animation: ${css`${spin} 1s linear infinite`}; */
 `;
 
 const LargeSpinner = styled.div`
@@ -57,7 +57,7 @@ const LargeSpinner = styled.div`
   border: 4px solid #f3f3f3;
   border-top: 4px solid #3b82f6;
   border-radius: 50%;
-  animation: ${spin} 1s linear infinite;
+  /* animation: ${css`${spin} 1s linear infinite`}; */
 `;
 
 interface LoadingSpinnerProps {

@@ -1,5 +1,5 @@
 import React from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 
 const ProgressContainer = styled.div<{ $isProcessing: boolean }>`
   display: flex;
@@ -24,12 +24,14 @@ const ProcessingIcon = styled.div<{ $isProcessing: boolean }>`
   border-top: 2px solid ${({ $isProcessing }) => 
     $isProcessing ? '#3b82f6' : '#666666'};
   border-radius: 50%;
-  animation: ${({ $isProcessing }) => $isProcessing ? 'spin 1s linear infinite' : 'none'};
+  /* animation: ${({ $isProcessing }) => $isProcessing ? css`spin 1s linear infinite` : 'none'}; */
   
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
+  ${css`
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `}
 `;
 
 interface HeaderProgressProps {
@@ -37,7 +39,7 @@ interface HeaderProgressProps {
 }
 
 const HeaderProgress: React.FC<HeaderProgressProps> = ({ isProcessing }) => {
-  console.log('DEBUG: HeaderProgress render', { isProcessing });
+  // console.log('DEBUG: HeaderProgress render', { isProcessing }); // Disabled to prevent console spam
   
   return (
     <ProgressContainer $isProcessing={isProcessing}>

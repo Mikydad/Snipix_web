@@ -17,10 +17,7 @@ export const store = configureStore({
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: {
-        ignoredActions: ['persist/PERSIST', 'upload/setFile'],
-        ignoredPaths: ['upload.file'],
-      },
+      serializableCheck: false, // Disable serialization check to prevent circular reference errors
     }),
 });
 

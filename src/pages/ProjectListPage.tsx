@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { useAppSelector, useAppDispatch } from '../redux/store';
 import { fetchProjects, deleteProject } from '../redux/slices/projectSlice';
 import { toast } from 'react-toastify';
@@ -160,13 +160,15 @@ const LoadingSpinner = styled.div`
   border: 3px solid transparent;
   border-top: 3px solid ${({ theme }) => theme.colors.primary};
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  /* animation: ${css`spin 1s linear infinite`}; */
   margin-right: ${({ theme }) => theme.spacing.md};
   
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
+  ${css`
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `}
 `;
 
 const ProjectListPage: React.FC = () => {

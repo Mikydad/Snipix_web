@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { useAppSelector, useAppDispatch } from '../redux/store';
 import { removeValidationError, clearValidationWarnings } from '../redux/slices/timelineSlice';
 
@@ -31,7 +31,7 @@ const ToastContainer = styled.div<{ $isVisible: boolean }>`
   right: 20px;
   z-index: 1000;
   max-width: 400px;
-  animation: ${props => props.$isVisible ? slideIn : slideOut} 0.3s ease-in-out;
+  /* animation: ${props => props.$isVisible ? css`${slideIn} 0.3s ease-in-out` : css`${slideOut} 0.3s ease-in-out`}; */
 `;
 
 const Toast = styled.div<{ $type: 'error' | 'warning' | 'success' }>`

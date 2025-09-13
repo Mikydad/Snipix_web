@@ -71,6 +71,7 @@ class ApiService {
                 if (refreshToken) {
                   // Import authService to use refreshToken method
                   const { authService } = await import('./authService');
+
                   console.log('🔄 Calling authService.refreshToken...');
                   
                   const newTokens = await authService.refreshToken(refreshToken);

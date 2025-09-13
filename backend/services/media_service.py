@@ -206,11 +206,15 @@ class MediaService:
     def trim_video_segments(self, video_path: str, segments: List[Dict[str, Any]]) -> str:
         """Trim video based on timeline segments (for hybrid approach)"""
         try:
+            print(f"🎬 MEDIA SERVICE: trim_video_segments called with {len(segments)} segments")
+            print(f"🎬 MEDIA SERVICE: Segments: {segments}")
+            
             if not segments:
                 return video_path
             
             # Sort segments by start time
             segments.sort(key=lambda x: x['startTime'])
+            print(f"🎬 MEDIA SERVICE: Sorted segments: {segments}")
             
             # Create output path
             output_path = os.path.join(

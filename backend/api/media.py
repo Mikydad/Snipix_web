@@ -214,8 +214,8 @@ async def get_video(
                 detail="Project not found or access denied"
             )
         
-        # Get video file path
-        video_path = project.video_path
+        # Get video file path - prefer trimmed video if available
+        video_path = project.trimmed_video_path or project.video_path
         if not video_path or not os.path.exists(video_path):
             raise HTTPException(
                 status_code=404,
@@ -301,6 +301,9 @@ async def trim_video(request: TrimVideoRequest, user_id: str = Depends(get_curre
             }
             for segment in request.segments
         ]
+        
+        print(f"🎬 TRIM VIDEO: Received segments: {segments}")
+        print(f"🎬 TRIM VIDEO: Original video path: {video_path}")
         
         # Process video segments
         trimmed_path = media_service.trim_video_segments(video_path, segments)

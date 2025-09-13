@@ -109,7 +109,7 @@ const TimelineEditor: React.FC<{
   const { selectedClips, selectedLayer } = useAppSelector(state => state.timeline);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = React.useState(false);
 
-  // Convert time to pixels based on zoom
+  // Convert time to pixels based on zoom (v2 - no logging)
   const timeToPixels = useCallback((time: number) => {
     const pixelsPerSecond = 100; // Base pixels per second
     return time * pixelsPerSecond * zoom + 120; // Add 120px offset for headers
@@ -118,6 +118,10 @@ const TimelineEditor: React.FC<{
   // Convert pixels to time
   const pixelsToTime = useCallback((pixels: number) => {
     const pixelsPerSecond = 100;
+    if (zoom <= 0) {
+      console.warn('TimelineEditor: Invalid zoom value for pixelsToTime', { zoom });
+      return 0;
+    }
     return (pixels - 120) / (pixelsPerSecond * zoom); // Subtract 120px offset for headers
   }, [zoom]);
 
@@ -188,19 +192,50 @@ const TimelineEditor: React.FC<{
   // Handle playhead drag start
   const handlePlayheadDragStart = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
+    
+    if (duration <= 0) {
+      console.warn('Playhead drag start blocked: duration is 0 or invalid', { duration });
+      return;
+    }
+    
+    console.log('Playhead drag start triggered', { 
+      duration, 
+      zoom, 
+      playheadTime,
+      hasTimelineRef: !!timelineRef.current 
+    });
     setIsDraggingPlayhead(true);
     document.body.style.cursor = 'ew-resize';
-  }, []);
+  }, [duration, zoom, playheadTime]);
 
   // Handle playhead drag move
   const handlePlayheadDragMove = useCallback((event: MouseEvent) => {
     if (!isDraggingPlayhead || !timelineRef.current) return;
     
+    // Defensive checks for invalid state
+    if (duration <= 0 || zoom <= 0) {
+      console.warn('TimelineEditor: Invalid state for drag operation', { duration, zoom });
+      return;
+    }
+    
     const rect = timelineRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left - 120; // Subtract header width
-    const newTime = pixelsToTime(x + 120); // Add offset back for calculation
-    dispatch(setPlayheadTime(Math.max(0, Math.min(newTime, duration))));
-  }, [isDraggingPlayhead, pixelsToTime, duration, dispatch]);
+    const x = event.clientX - rect.left; // Get position relative to timeline container
+    const newTime = pixelsToTime(x); // Convert directly to time
+    const clampedTime = Math.max(0, Math.min(newTime, duration));
+    
+    console.log('Playhead drag move:', { 
+      clientX: event.clientX,
+      rectLeft: rect.left,
+      rectWidth: rect.width,
+      x,
+      newTime,
+      clampedTime,
+      duration,
+      zoom,
+      isDraggingPlayhead 
+    });
+    dispatch(setPlayheadTime(clampedTime));
+  }, [isDraggingPlayhead, pixelsToTime, duration, zoom, dispatch]);
 
   // Handle playhead drag end
   const handlePlayheadDragEnd = useCallback(() => {
@@ -316,6 +351,21 @@ const TimelineEditor: React.FC<{
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [playheadTime, duration, dispatch, selectedLayer]);
+
+  // Debug playhead position (only log when values change significantly)
+  useEffect(() => {
+    if (duration > 0) {
+      console.log('Playhead render (v2):', { 
+        playheadTime, 
+        left: timeToPixels(playheadTime), 
+        zoom, 
+        duration,
+        isDraggingPlayhead 
+      });
+    } else {
+      console.log('Playhead blocked: duration is 0', { duration, playheadTime });
+    }
+  }, [playheadTime, zoom, duration, isDraggingPlayhead]);
 
   // Handle playhead dragging
   useEffect(() => {

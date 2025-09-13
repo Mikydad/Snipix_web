@@ -130,6 +130,8 @@ class Project(SoftDeleteSchema):
     thumbnail: Optional[str] = None
     duration: Optional[float] = None
     video_path: Optional[str] = None
+    trimmed_video_path: Optional[str] = None
+    trimmed_duration: Optional[float] = None
     status: str = Field(default="active")  # active, archived, processing
     metadata: Dict[str, Any] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
@@ -156,6 +158,7 @@ class Clip(BaseSchema):
     start_time: float
     end_time: float
     duration: float
+    original_start_time: Optional[float] = None
     source_path: Optional[str] = None
     content: Optional[str] = None
     properties: ClipProperties = Field(default_factory=ClipProperties)
@@ -171,6 +174,7 @@ class Layer(BaseSchema):
     is_locked: bool = False
     is_muted: bool = False
     order: int = 0
+    is_main_video: bool = False
 
 # Timeline models
 class Marker(BaseSchema):

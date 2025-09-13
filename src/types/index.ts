@@ -99,12 +99,95 @@ export interface TimelineState {
   selectedClips: string[];
   isPlaying: boolean;
   isSnapping: boolean;
-  undoStack: TimelineState[];
-  redoStack: TimelineState[];
+  undoStack: ActionHistoryItem[];
+  redoStack: ActionHistoryItem[];
   selectedLayer: string | null; // Currently selected layer for editing
   trimState: TrimState; // Current trim operation state
   validationState: ValidationState; // Validation and error state
+  checkpoints: Checkpoint[]; // Save checkpoints for persistent recovery
+  lastSavedCheckpoint: string | null; // ID of last saved checkpoint
+  hasUnsavedChanges: boolean; // Track if there are unsaved changes
+  actionHistory: ActionHistoryItem[]; // Detailed action history for UI
+  maxHistorySize: number; // Maximum number of actions to keep in history
+  timelineHistory?: any[]; // Backend timeline history for restore functionality
 }
+
+// Action History and Undo/Redo Types
+export interface ActionHistoryItem {
+  id: string;
+  type: ActionType;
+  description: string;
+  timestamp: number;
+  state: Partial<TimelineState>; // Only store the changed parts
+  metadata?: ActionMetadata;
+}
+
+export interface ActionMetadata {
+  projectId?: string;
+  userId?: string;
+  operationType?: ActionType;
+  timestamp?: number;
+  layerId?: string;
+  clipId?: string;
+  markerId?: string;
+  isCheckpoint?: boolean;
+  checkpointId?: string;
+  affectedLayers?: string[];
+  affectedClips?: string[];
+  duration?: number;
+  beforeState?: any;
+  afterState?: any;
+  // Additional properties used in operation manager
+  originalLayerId?: string;
+  originalClipId?: string;
+  targetTime?: number;
+  snapOffset?: number;
+}
+
+export interface Checkpoint {
+  id: string;
+  projectId: string;
+  timestamp: number;
+  description: string;
+  state: TimelineState;
+  isAutoSave: boolean;
+  metadata: CheckpointMetadata;
+}
+
+export interface CheckpointMetadata {
+  version: string;
+  userId?: string;
+  actionCount: number;
+  layersCount: number;
+  clipsCount: number;
+  duration: number;
+}
+
+export type ActionType = 
+  | 'addLayer' 
+  | 'removeLayer' 
+  | 'updateLayer' 
+  | 'reorderLayers'
+  | 'addClip' 
+  | 'removeClip' 
+  | 'updateClip' 
+  | 'moveClip' 
+  | 'trimClip' 
+  | 'splitClip' 
+  | 'mergeClips'
+  | 'setPlayheadTime' 
+  | 'setDuration' 
+  | 'setZoom'
+  | 'addMarker' 
+  | 'removeMarker' 
+  | 'updateMarker'
+  | 'saveCheckpoint' 
+  | 'restoreCheckpoint' 
+  | 'batchOperation'
+  | 'undo' 
+  | 'redo' 
+  | 'saveState'
+  | 'projectSwitch';
 
 // Validation and error state
 export interface ValidationState {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { toast } from 'react-toastify';
 import { useAppSelector, useAppDispatch } from '../redux/store';
 import { fetchProjectById } from '../redux/slices/projectSlice';
@@ -166,12 +166,14 @@ const LoadingSpinner = styled.div`
   border: 2px solid transparent;
   border-top: 2px solid currentColor;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  /* animation: ${css`spin 1s linear infinite`}; */
   
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
+  ${css`
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `}
 `;
 
 const TranscriptPage: React.FC = () => {
